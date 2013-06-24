@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<artifactId>UMLS</artifactId>
+		<groupId>gov.va.oia.terminology.converters</groupId>
+		<version>1.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>UMLS-mojo</artifactId>
+	<packaging>maven-plugin</packaging>
+	<name>UMLS-mojo</name>
+
+	<dependencies>
+		<dependency>
+			<groupId>gov.va.oia.terminology.converters</groupId>
+			<artifactId>umlsLoaderUtilities</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.maven</groupId>
+			<artifactId>maven-plugin-api</artifactId>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.ihtsdo</groupId>
+			<artifactId>wb-foundation</artifactId>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.ihtsdo</groupId>
+			<artifactId>wb-api</artifactId>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.ihtsdo</groupId>
+			<artifactId>wb-bdb</artifactId>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>gov.va.oia.terminology.converters</groupId>
+			<artifactId>convertersCommonCode</artifactId>
+			<scope>compile</scope>
+		</dependency>
+	</dependencies>
+</project>

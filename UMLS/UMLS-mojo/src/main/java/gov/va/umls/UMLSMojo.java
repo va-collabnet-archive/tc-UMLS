@@ -1,7 +1,6 @@
 package gov.va.umls;
 
 import gov.va.oia.terminology.converters.sharedUtils.ConsoleUtil;
-import gov.va.oia.terminology.converters.sharedUtils.stats.ConverterUUID;
 import gov.va.oia.terminology.converters.umlsUtils.RRFDatabaseHandle;
 import gov.va.oia.terminology.converters.umlsUtils.UMLSFileReader;
 import gov.va.oia.terminology.converters.umlsUtils.sql.TableDefinition;
@@ -9,8 +8,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -18,9 +19,9 @@ import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 
 /**
- * Goal to build RxNorm
+ * Goal to convert UMLS data
  * 
- * @goal buildRxNorm
+ * @goal buildUMLS
  * 
  * @phase process-sources
  */
@@ -30,10 +31,7 @@ public class UMLSMojo extends AbstractMojo
 //	private HashMap<String, String> loadedRels_ = new HashMap<>();
 //	private HashMap<String, String> skippedRels_ = new HashMap<>();
 //
-//	private EConcept allRefsetConcept_;
-//	private EConcept allCUIRefsetConcept_;
-//	private EConcept allAUIRefsetConcept_;
-//	private EConcept cpcRefsetConcept_;
+
 
 	/**
 	 * Where UMLS source files are
@@ -80,9 +78,10 @@ public class UMLSMojo extends AbstractMojo
 	 * A list of SABs to include in the load.  If provided, any SABs that do not match are excluded from the conversion.
 	 * If not provided, or blank, all data found in the Metamorphosys output it loaded.
 	 * 
+	 * @parameter
 	 * @optional
 	 */
-	private HashSet<String> SABFilterList;
+	private List<String> sabFilters;
 
 	public void execute() throws MojoExecutionException
 	{
@@ -110,60 +109,42 @@ public class UMLSMojo extends AbstractMojo
 
 			loadDatabase();
 			
-			if (SABFilterList == null || SABFilterList.size() == 0)
+			if (sabFilters == null || sabFilters.size() == 0)
 			{
-				//TODO query - find all SABs in provided data set.
+				sabFilters = new ArrayList<>();
+				Statement s = db_.getConnection().createStatement();
+				ResultSet rs = s.executeQuery("Select distinct SAB from MRRANK");
+				while (rs.next())
+				{
+					String sab = rs.getString("SAB");
+					sabFilters.add(sab);
+				}
+				rs.close();
+				s.close();
 			}
 			
-			for (String sab : SABFilterList)
+			for (String sab : sabFilters)
 			{
-				//TODO get SSN from MRSAB
-				SABLoader sl = new SABLoader(sab, sab, outputDirectory, db_);
+				Statement s = db_.getConnection().createStatement();
+				//TODO switch to VSAB
+				ResultSet rs = s.executeQuery("Select SSN from MRSAB where RSAB ='" + sab + "' ");
+				String terminologyName = "";
+				if (rs.next())
+				{
+					terminologyName = rs.getString("SSN");
+				}
+				else
+				{
+					throw new RuntimeException("Can't find name for " + sab);
+				}
+				new SABLoader(sab, terminologyName, outputDirectory, db_, loaderVersion, releaseVersion);
 			}
 
-//			allRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.ALL.getProperty());
-//			cpcRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.CPC.getProperty());
-//			allCUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.CUI_CONCEPTS.getProperty());
-//			allAUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.AUI_CONCEPTS.getProperty());
-//
-//			// Add version data to allRefsetConcept
-//			eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion, BaseContentVersion.LOADER_VERSION.getProperty().getUUID(), false);
-//			eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, BaseContentVersion.RELEASE.getProperty().getUUID(), false);
-			
-			//Disable the masterUUID debug map now that the metadata is populated, not enough memory on most systems to maintain it for everything else.
-			ConverterUUID.disableUUIDMap_ = true;
-			int cuiCounter = 0;
 
-//			Statement statement = db_.getConnection().createStatement();
-//			//TODO SIZELIMIT - remove SAB restriction
-//			ResultSet rs = statement.executeQuery("select RXCUI, LAT, RXAUI, SAUI, SCUI, SAB, TTY, CODE, STR, SUPPRESS, CVF from RXNCONSO " 
-//					+ (liteLoad ? "where SAB='RXNORM' " : "") + "order by RXCUI" );
-//			ArrayList<RXNCONSO> conceptData = new ArrayList<>();
-//			while (rs.next())
-//			{
-//				RXNCONSO current = new RXNCONSO(rs);
-//				if (conceptData.size() > 0 && !conceptData.get(0).rxcui.equals(current.rxcui))
-//				{
-//					processCUIRows(conceptData);
-//					ConsoleUtil.showProgress();
-//					cuiCounter++;
-//					if (cuiCounter % 10000 == 0)
-//					{
-//						ConsoleUtil.println("Processed " + cuiCounter + " CUIs creating " + eConcepts_.getLoadStats().getConceptCount() + " concepts");
-//					}
-//					conceptData.clear();
-//				}
-//				conceptData.add(current);
-//			}
-//			rs.close();
-//			statement.close();
-//
-//			// process last
-//			processCUIRows(conceptData);
+
 //			
 //			checkRelationships();
-//
-//			eConcepts_.storeRefsetConcepts(ptRefsets_, dos_);
+
 			
 			db_.shutdown();
 
@@ -244,7 +225,7 @@ public class UMLSMojo extends AbstractMojo
 				{
 					dataFile = new File(meta, tableName + ".RRF");
 				}
-				db_.loadDataIntoTable(td, new UMLSFileReader(new BufferedReader(new FileReader(dataFile))), SABFilterList);
+				db_.loadDataIntoTable(td, new UMLSFileReader(new BufferedReader(new FileReader(dataFile))), sabFilters);
 			}
 
 
@@ -272,87 +253,7 @@ public class UMLSMojo extends AbstractMojo
 		}
 	}
 
-//	private void processCUIRows(ArrayList<RXNCONSO> conceptData) throws IOException, SQLException
-//	{
-//		EConcept cuiConcept = eConcepts_.createConcept(ConverterUUID.createNamespaceUUIDFromString("RXCUI" + conceptData.get(0).rxcui, true));
-//		eConcepts_.addAdditionalIds(cuiConcept, conceptData.get(0).rxcui, ptIds_.getProperty("RXCUI").getUUID(), false);
-//
-//		ArrayList<ValuePropertyPairWithSAB> descriptions = new ArrayList<>();
-//		
-//		for (RXNCONSO rowData : conceptData)
-//		{
-//			EConcept auiConcept = eConcepts_.createConcept(ConverterUUID.createNamespaceUUIDFromString("RXAUI" + rowData.rxaui, true));
-//			eConcepts_.addAdditionalIds(auiConcept, rowData.rxaui, ptIds_.getProperty("RXAUI").getUUID(), false);
-//			
-//			if (rowData.saui != null)
-//			{
-//				eConcepts_.addStringAnnotation(auiConcept, rowData.saui, ptAttributes_.getProperty("SAUI").getUUID(), false);
-//			}
-//			if (rowData.scui != null)
-//			{
-//				eConcepts_.addStringAnnotation(auiConcept, rowData.scui, ptAttributes_.getProperty("SCUI").getUUID(), false);
-//			}
-//			
-//			eConcepts_.addUuidAnnotation(auiConcept, ptSABs_.getProperty(rowData.sab).getUUID(), ptAttributes_.getProperty("SAB").getUUID());
-//
-//			if (rowData.code != null)
-//			{
-//				eConcepts_.addStringAnnotation(auiConcept, rowData.code, ptAttributes_.getProperty("CODE").getUUID(), false);
-//			}
-//
-//			eConcepts_.addUuidAnnotation(auiConcept, ptSuppress_.getProperty(rowData.suppress).getUUID(), ptAttributes_.getProperty("SUPPRESS")
-//					.getUUID());
-//			
-//			if (rowData.cvf != null)
-//			{
-//				if (rowData.cvf.equals("4096"))
-//				{
-//					eConcepts_.addRefsetMember(cpcRefsetConcept_, auiConcept.getPrimordialUuid(), null, true, null);
-//				}
-//				else
-//				{
-//					throw new RuntimeException("Unexpected value in RXNCONSO cvf column '" + rowData.cvf + "'");
-//				}
-//			}
-//			// TODO handle language.
-//			if (!rowData.lat.equals("ENG"))
-//			{
-//				ConsoleUtil.printErrorln("Non-english lang settings not handled yet!");
-//			}
-//			
-//			eConcepts_.addDescription(auiConcept, rowData.str, DescriptionType.FSN, true, ptDescriptions_.getProperty(rowData.tty).getUUID(), 
-//					ptDescriptions_.getPropertyTypeReferenceSetUUID(), false);
-//			
-//			//used for sorting description to find one for the CUI concept
-//			descriptions.add(new ValuePropertyPairWithSAB(rowData.str, ptDescriptions_.getProperty(rowData.tty), rowData.sab));
-//			
-//			//Add attributes
-//			processConceptAttributes(auiConcept, rowData.rxcui, rowData.rxaui);
-//			
-//			eConcepts_.addRelationship(auiConcept, cuiConcept.getPrimordialUuid());
-//			
-//			eConcepts_.addRefsetMember(allRefsetConcept_, auiConcept.getPrimordialUuid(), null, true, null);
-//			eConcepts_.addRefsetMember(allAUIRefsetConcept_, auiConcept.getPrimordialUuid(), null, true, null);
-//			addRelationships(auiConcept, rowData.rxaui, false);
-//			auiConcept.writeExternal(dos_);
-//		}
-//		
-//		//Pick the 'best' description to use on the cui concept
-//		Collections.sort(descriptions);
-//		eConcepts_.addDescription(cuiConcept, descriptions.get(0).getValue(), DescriptionType.FSN, true, descriptions.get(0).getProperty().getUUID(), 
-//				ptDescriptions_.getPropertyTypeReferenceSetUUID(), false);
-//		
-//		//there are no attributes in rxnorm without an AUI.
-//		
-//		//add semantic types
-//		processSemanticTypes(cuiConcept, conceptData.get(0).rxcui);
-//		
-//		addRelationships(cuiConcept, conceptData.get(0).rxcui, true);
-//
-//		eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
-//		eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
-//		cuiConcept.writeExternal(dos_);
-//	}
+
 //	
 //	private void processConceptAttributes(EConcept concept, String rxcui, String rxaui) throws SQLException
 //	{
@@ -582,8 +483,8 @@ public class UMLSMojo extends AbstractMojo
 		//mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted/2013AA/");
 		mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/");
 		//mojo.tmpDBPath = new File("/mnt/d/Scratch/");
-		mojo.SABFilterList = new HashSet<String>();
-		mojo.SABFilterList.add("CCS");
+		mojo.sabFilters = new ArrayList<String>();
+		//mojo.SABFilterList.add("CCS");
 		mojo.execute();
 	}
 }

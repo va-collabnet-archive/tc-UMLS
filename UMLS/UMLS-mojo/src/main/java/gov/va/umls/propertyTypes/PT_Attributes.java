@@ -10,20 +10,10 @@ public class PT_Attributes extends BPT_Attributes
 {
 	public PT_Attributes()
 	{
-//		addProperty("RXAUI", null, "Unique identifier for atom (RxNorm Atom Id)");  //loaded as an attribute and a id
-//		
 		addProperty("tty_class");
-//		addProperty("STYPE", null, "The name of the column in RXNCONSO.RRF or RXNREL.RRF that contains the identifier to which the attribute is attached, e.g., CUI, AUI.");
-//		addProperty("STYPE1", null, "The name of the column in RXNCONSO.RRF that contains the identifier used for the first concept or first atom in source of the relationship (e.g., 'AUI' or 'CUI')");
-//		addProperty("STYPE2", null, "The name of the column in RXNCONSO.RRF that contains the identifier used for the second concept or second atom in the source of the relationship (e.g., 'AUI' or 'CUI')");
-//		addProperty("ATUI", null, "Unique identifier for attribute");
-//		addProperty("SATUI", null, "Source asserted attribute identifier (optional - present if it exists)");
-//		addProperty("UMLSAUI");  //This property should be in RXNDOC, but it is currently missing - bug in the data  //TODO remove in future release
 		addProperty("STN", "Semantic Type tree number", null);
-//		addProperty("STY", "Semantic Type", null);
+		addProperty("STY", "Semantic Type", null);
 		addProperty("URI");
-//		addProperty("RG", null, "Machine generated and unverified indicator");
-//		addProperty("RELA Label", null, "More specific relationship label");
 		addProperty("TS", null, "Term Status");
 		addProperty("LUI", null, "Unique identifier for term");
 		addProperty("SUI", null, "Unique identifier for string");
@@ -37,5 +27,16 @@ public class PT_Attributes extends BPT_Attributes
 		addProperty("SRL", null, "Source restriction level");
 		addProperty("SUPPRESS", null, "Suppressible flag. Values = O, E, Y, or N");
 		addProperty("CVF", null, "Content View Flag. Bit field used to flag rows included in Content View.");
+		addProperty("METAUI", null, "Metathesaurus atom identifier (will have a leading A) or Metathesaurus relationship identifier (will have a leading R) or blank if it is a concept attribute.");
+		addProperty("STYPE", null, "The name of the column in MRCONSO.RRF or MRREL.RRF that contains the identifier to which the attribute is attached, i.e. AUI, CODE, CUI, RUI, SCUI, SDUI.");
+		addProperty("ATUI", null, "Unique identifier for attribute");
+		addProperty("SATUI", null, "Source asserted attribute identifier (optional - present if it exists)");
+		addProperty("STYPE1", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the first element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
+		addProperty("STYPE2", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the second element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
+		addProperty("RELA Label", null, "Additional (more specific) relationship label (optional)");
+		addProperty("SRUI", null, "Source asserted relationship identifier, if present");
+		addProperty("SL", null, "Source of relationship labels");
+		addProperty("RG", null, "Relationship group. Used to indicate that a set of relationships should be looked at in conjunction.");
+		addProperty("DIR", null, "Source asserted directionality flag. Y indicates that this is the direction of the relationship in its source; N indicates that it is not; a blank indicates that it is not important or has not yet been determined.");
 	}
 }

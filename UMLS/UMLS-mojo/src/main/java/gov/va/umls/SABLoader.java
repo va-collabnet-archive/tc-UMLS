@@ -2,7 +2,6 @@ package gov.va.umls;
 
 import gov.va.oia.terminology.converters.sharedUtils.ConsoleUtil;
 import gov.va.oia.terminology.converters.sharedUtils.EConceptUtility.DescriptionType;
-import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.BPT_ContentVersion.BaseContentVersion;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.BPT_Descriptions;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.Property;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.PropertyType;
@@ -16,6 +15,7 @@ import gov.va.umls.propertyTypes.PT_IDs;
 import gov.va.umls.rrf.MRCONSO;
 import java.io.File;
 import java.io.IOException;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 import org.ihtsdo.etypes.EConcept;
+import org.ihtsdo.tk.dto.concept.component.TkComponent;
+import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
 
 public class SABLoader extends BaseConverter
 {
@@ -32,18 +34,29 @@ public class SABLoader extends BaseConverter
 	
 	protected PropertyType ptSTT_Types_;
 	
+	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, cuiRelStatementForward, auiRelStatementForward, cuiRelStatementBackward, auiRelStatementBackward;
+	
 	public SABLoader(String sab, String terminologyName, File outputDirectory, RRFDatabaseHandle db, String loaderVersion, String releaseVersion) throws Exception
 	{
-		super(sab, terminologyName, db, "MR", outputDirectory, true, new PT_IDs(), new PT_Attributes());
+		//just putting all UMLS related terms on a 'UMLS' path, otherwise - to overwhelming to configure because of the current issues with paths in the WB.
+		super(sab, terminologyName, "UMLS", db, "MR", outputDirectory, true, new PT_IDs(), new PT_Attributes());
 		
-		allRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.ALL.getProperty());
-		allCUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.CUI_CONCEPTS.getProperty());
-		allAUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.AUI_CONCEPTS.getProperty());
+		allRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.ALL.getPropertyName());
+		allCUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.CUI_CONCEPTS.getPropertyName());
+		allAUIRefsetConcept_ = ptRefsets_.getConcept(PT_Refsets.Refsets.AUI_CONCEPTS.getPropertyName());
 		
 		// Add version data to allRefsetConcept
 		//TODO move this to a root concept, if I can find one...
-		eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion, BaseContentVersion.LOADER_VERSION.getProperty().getUUID(), false);
-		eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, BaseContentVersion.RELEASE.getProperty().getUUID(), false);
+		eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
+		eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
+		
+		satAtomStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI = ? and SAB=?");
+		satConceptStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI is null and SAB=?");
+		semanticTypeStatement = db_.getConnection().prepareStatement("select TUI, ATUI, CVF from MRSTY where CUI = ?");
+		cuiRelStatementForward = db_.getConnection().prepareStatement("SELECT * from MRREL where CUI2 = ? and AUI2 is null and SAB='" + sab + "'");
+		auiRelStatementForward = db_.getConnection().prepareStatement("SELECT * from MRREL where CUI2 = ? and AUI2 = ? and SAB='" + sab + "'");
+		cuiRelStatementBackward = db_.getConnection().prepareStatement("SELECT * from MRREL where CUI1 = ? and AUI1 is null and SAB='" + sab + "'");
+		auiRelStatementBackward = db_.getConnection().prepareStatement("SELECT * from MRREL where CUI1 = ? and AUI1 = ? and SAB='" + sab + "'");
 		
 		//Disable the masterUUID debug map now that the metadata is populated, not enough memory on most systems to maintain it for everything else.
 		//ConverterUUID.disableUUIDMap_ = true;
@@ -76,6 +89,14 @@ public class SABLoader extends BaseConverter
 
 		// process last
 		processCUIRows(conceptData);
+		
+		satAtomStatement.close();
+		satConceptStatement.close();
+		semanticTypeStatement.close();
+		cuiRelStatementForward.close();
+		cuiRelStatementBackward.close();
+		auiRelStatementBackward.close();
+		auiRelStatementForward.close();
 		
 		finish();
 	}
@@ -113,71 +134,86 @@ public class SABLoader extends BaseConverter
 
 		ArrayList<ValuePropertyPair> descriptions = new ArrayList<>();
 		
-		for (MRCONSO rowData : conceptData)
+		for (MRCONSO consoRowData : conceptData)
 		{
-			EConcept auiConcept = eConcepts_.createConcept(ConverterUUID.createNamespaceUUIDFromString("AUI" + rowData.aui, true));
-			eConcepts_.addAdditionalIds(auiConcept, rowData.aui, ptIds_.getProperty("AUI").getUUID(), false);
+			EConcept auiConcept = eConcepts_.createConcept(ConverterUUID.createNamespaceUUIDFromString("AUI" + consoRowData.aui, true));
+			eConcepts_.addAdditionalIds(auiConcept, consoRowData.aui, ptIds_.getProperty("AUI").getUUID(), false);
 			
 			// TODO handle language.
-			if (!rowData.lat.equals("ENG"))
+			if (!consoRowData.lat.equals("ENG"))
 			{
 				ConsoleUtil.printErrorln("Non-english lang settings not handled yet!");
 			}
 			
-			eConcepts_.addStringAnnotation(auiConcept, rowData.ts, ptAttributes_.getProperty("TS").getUUID(), false);
-			eConcepts_.addStringAnnotation(auiConcept, rowData.lui, ptAttributes_.getProperty("LUI").getUUID(), false);
-			eConcepts_.addStringAnnotation(auiConcept, rowData.stt, ptAttributes_.getProperty("STT").getUUID(), false);
-			eConcepts_.addUuidAnnotation(auiConcept, ptSTT_Types_.getProperty(rowData.stt).getUUID(), ptAttributes_.getProperty("STT").getUUID());
-			eConcepts_.addStringAnnotation(auiConcept, rowData.sui, ptAttributes_.getProperty("SUI").getUUID(), false);
-			eConcepts_.addStringAnnotation(auiConcept, rowData.ispref, ptAttributes_.getProperty("ISPREF").getUUID(), false);
+			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ts, ptAttributes_.getProperty("TS").getUUID(), false);
+			eConcepts_.addStringAnnotation(auiConcept, consoRowData.lui, ptAttributes_.getProperty("LUI").getUUID(), false);
+			eConcepts_.addStringAnnotation(auiConcept, consoRowData.stt, ptAttributes_.getProperty("STT").getUUID(), false);
+			eConcepts_.addUuidAnnotation(auiConcept, ptSTT_Types_.getProperty(consoRowData.stt).getUUID(), ptAttributes_.getProperty("STT").getUUID());
+			eConcepts_.addStringAnnotation(auiConcept, consoRowData.sui, ptAttributes_.getProperty("SUI").getUUID(), false);
+			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ispref, ptAttributes_.getProperty("ISPREF").getUUID(), false);
 
 			
-			if (rowData.saui != null)
+			if (consoRowData.saui != null)
 			{
-				eConcepts_.addStringAnnotation(auiConcept, rowData.saui, ptAttributes_.getProperty("SAUI").getUUID(), false);
+				eConcepts_.addStringAnnotation(auiConcept, consoRowData.saui, ptAttributes_.getProperty("SAUI").getUUID(), false);
 			}
-			if (rowData.scui != null)
+			if (consoRowData.scui != null)
 			{
-				eConcepts_.addStringAnnotation(auiConcept, rowData.scui, ptAttributes_.getProperty("SCUI").getUUID(), false);
+				eConcepts_.addStringAnnotation(auiConcept, consoRowData.scui, ptAttributes_.getProperty("SCUI").getUUID(), false);
 			}
-			if (rowData.scui != null)
+			if (consoRowData.scui != null)
 			{
-				eConcepts_.addStringAnnotation(auiConcept, rowData.sdui, ptAttributes_.getProperty("SDUI").getUUID(), false);
+				eConcepts_.addStringAnnotation(auiConcept, consoRowData.sdui, ptAttributes_.getProperty("SDUI").getUUID(), false);
 			}
 			
-			eConcepts_.addUuidAnnotation(auiConcept, ptSABs_.getProperty(rowData.sab).getUUID(), ptAttributes_.getProperty("SAB").getUUID());
+			eConcepts_.addUuidAnnotation(auiConcept, ptSABs_.getProperty(consoRowData.sab).getUUID(), ptAttributes_.getProperty("SAB").getUUID());
 
-			if (rowData.code != null)
+			if (consoRowData.code != null)
 			{
-				eConcepts_.addStringAnnotation(auiConcept, rowData.code, ptAttributes_.getProperty("CODE").getUUID(), false);
+				eConcepts_.addStringAnnotation(auiConcept, consoRowData.code, ptAttributes_.getProperty("CODE").getUUID(), false);
 			}
 			
-			eConcepts_.addUuidAnnotation(auiConcept, ptSourceRestrictionLevels_.getProperty(rowData.srl.toString()).getUUID(), ptAttributes_.getProperty("SRL")
+			eConcepts_.addUuidAnnotation(auiConcept, ptSourceRestrictionLevels_.getProperty(consoRowData.srl.toString()).getUUID(), ptAttributes_.getProperty("SRL")
 					.getUUID());
 
-			eConcepts_.addUuidAnnotation(auiConcept, ptSuppress_.getProperty(rowData.suppress).getUUID(), ptAttributes_.getProperty("SUPPRESS")
+			eConcepts_.addUuidAnnotation(auiConcept, ptSuppress_.getProperty(consoRowData.suppress).getUUID(), ptAttributes_.getProperty("SUPPRESS")
 					.getUUID());
 			
-			if (rowData.cvf != null)
+			if (consoRowData.cvf != null)
 			{
-				eConcepts_.addStringAnnotation(auiConcept, rowData.cvf.toString(), ptAttributes_.getProperty("CVF").getUUID(), false);
+				eConcepts_.addStringAnnotation(auiConcept, consoRowData.cvf.toString(), ptAttributes_.getProperty("CVF").getUUID(), false);
 			}
 			
 			
-			eConcepts_.addDescription(auiConcept, rowData.str, DescriptionType.FSN, true, ptDescriptions_.getProperty(rowData.tty).getUUID(), 
+			eConcepts_.addDescription(auiConcept, consoRowData.str, DescriptionType.FSN, true, ptDescriptions_.getProperty(consoRowData.tty).getUUID(), 
 					ptDescriptions_.getPropertyTypeReferenceSetUUID(), false);
 			
 			//used for sorting description to find one for the CUI concept
-			descriptions.add(new ValuePropertyPair(rowData.str, ptDescriptions_.getProperty(rowData.tty)));
+			descriptions.add(new ValuePropertyPair(consoRowData.str, ptDescriptions_.getProperty(consoRowData.tty)));
 			
-			//Add attributes
-//			processConceptAttributes(auiConcept, rowData.cui, rowData.aui);
+			//Add Atom attributes
+			satAtomStatement.clearParameters();
+			satAtomStatement.setString(1, consoRowData.cui);
+			satAtomStatement.setString(2, consoRowData.aui);
+			satAtomStatement.setString(3, sab_);
+			ResultSet rs = satAtomStatement.executeQuery();
+			processSAT(auiConcept.getConceptAttributes(), rs);
 			
+			//Add rel to parent CUI
 			eConcepts_.addRelationship(auiConcept, cuiConcept.getPrimordialUuid());
 			
 			eConcepts_.addRefsetMember(allRefsetConcept_, auiConcept.getPrimordialUuid(), null, true, null);
 			eConcepts_.addRefsetMember(allAUIRefsetConcept_, auiConcept.getPrimordialUuid(), null, true, null);
-//			addRelationships(auiConcept, rowData.aui, false);
+			
+			auiRelStatementForward.clearParameters();
+			auiRelStatementForward.setString(1, conceptData.get(0).cui);
+			auiRelStatementForward.setString(2, consoRowData.aui);
+			addRelationships(auiConcept, auiRelStatementForward.executeQuery(), true);
+			
+			auiRelStatementBackward.clearParameters();
+			auiRelStatementBackward.setString(1, conceptData.get(0).cui);
+			auiRelStatementBackward.setString(2, consoRowData.aui);
+			addRelationships(auiConcept, auiRelStatementBackward.executeQuery(), false);
 			auiConcept.writeExternal(dos_);
 		}
 		
@@ -186,17 +222,95 @@ public class SABLoader extends BaseConverter
 		eConcepts_.addDescription(cuiConcept, descriptions.get(0).getValue(), DescriptionType.FSN, true, descriptions.get(0).getProperty().getUUID(), 
 				ptDescriptions_.getPropertyTypeReferenceSetUUID(), false);
 		
-		//there are no attributes in rxnorm without an AUI.
-		//TODO check this on umls
+		//process concept attributes
+		satConceptStatement.clearParameters();
+		satConceptStatement.setString(1, conceptData.get(0).cui);
+		satConceptStatement.setString(2, sab_);
+		ResultSet rs = satConceptStatement.executeQuery();
+		processSAT(cuiConcept.getConceptAttributes(), rs);
 		
 		//add semantic types
-//		processSemanticTypes(cuiConcept, conceptData.get(0).cui);
+		semanticTypeStatement.clearParameters();
+		semanticTypeStatement.setString(1, conceptData.get(0).cui);
+		rs = semanticTypeStatement.executeQuery();
+		processSemanticTypes(cuiConcept, rs);
+
+		cuiRelStatementForward.clearParameters();
+		cuiRelStatementForward.setString(1, conceptData.get(0).cui);
+		addRelationships(cuiConcept, cuiRelStatementForward.executeQuery(), true);
 		
-//		addRelationships(cuiConcept, conceptData.get(0).cui, true);
+		cuiRelStatementBackward.clearParameters();
+		cuiRelStatementBackward.setString(1, conceptData.get(0).cui);
+		addRelationships(cuiConcept, cuiRelStatementBackward.executeQuery(), false);
 
 		eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
 		eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
 		cuiConcept.writeExternal(dos_);
+	}
+	
+	protected void processSAT(TkComponent<?> itemToAnnotate, ResultSet rs) throws SQLException
+	{
+		while (rs.next())
+		{
+			//String cui = rs.getString("CUI");
+			String lui = rs.getString("LUI");
+			String sui = rs.getString("SUI");
+			//String metaui = rs.getString("METAUI");
+			String stype = rs.getString("STYPE");
+			String code = rs.getString("CODE");
+			String atui = rs.getString("ATUI");
+			String satui = rs.getString("SATUI");
+			String atn = rs.getString("ATN");
+			String sab = rs.getString("SAB");
+			String atv = rs.getString("ATV");
+			String suppress = rs.getString("SUPPRESS");
+			Integer cvf = rs.getObject("CVF") == null ? null : rs.getInt("CVF");
+
+			TkRefsetStrMember attribute = eConcepts_.addStringAnnotation(itemToAnnotate, ConverterUUID.createNamespaceUUIDFromString("ATUI" + atui), atv, 
+					ptAttributes_.getProperty(atn).getUUID(), false, null);
+			
+			if (lui != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, lui, ptAttributes_.getProperty("LUI").getUUID(), false);
+			}
+			
+			if (sui != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, sui, ptAttributes_.getProperty("SUI").getUUID(), false);
+			}
+			
+			if (stype != null)
+			{
+				eConcepts_.addUuidAnnotation(attribute, ptSTypes_.getProperty(stype).getUUID(), ptAttributes_.getProperty("STYPE").getUUID());
+			}
+			
+			if (code != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, code, ptAttributes_.getProperty("CODE").getUUID(), false);
+			}
+			
+			if (atui != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, atui, ptAttributes_.getProperty("ATUI").getUUID(), false);
+			}
+			
+			if (satui != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, satui, ptAttributes_.getProperty("SATUI").getUUID(), false);
+			}
+			
+			eConcepts_.addUuidAnnotation(attribute, ptSABs_.getProperty(sab).getUUID(), ptAttributes_.getProperty("SAB").getUUID());
+			
+			if (suppress != null)
+			{
+				eConcepts_.addUuidAnnotation(attribute, ptSuppress_.getProperty(suppress).getUUID(), ptAttributes_.getProperty("SUPPRESS").getUUID());
+			}
+			if (cvf != null)
+			{
+				eConcepts_.addStringAnnotation(attribute, cvf.toString(), ptAttributes_.getProperty("CVF").getUUID(), false);
+			}
+		}
+		rs.close();
 	}
 
 	@Override

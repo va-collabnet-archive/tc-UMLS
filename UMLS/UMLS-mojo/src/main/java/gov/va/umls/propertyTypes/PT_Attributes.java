@@ -33,7 +33,7 @@ public class PT_Attributes extends BPT_Attributes
 		addProperty("SATUI", null, "Source asserted attribute identifier (optional - present if it exists)");
 		addProperty("STYPE1", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the first element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
 		addProperty("STYPE2", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the second element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
-		addProperty("RELA Label", null, "Additional (more specific) relationship label (optional)");
+		addProperty("Generic rel type", null, "Generic rel type for this relationship");
 		addProperty("SRUI", null, "Source asserted relationship identifier, if present");
 		addProperty("SL", null, "Source of relationship labels");
 		addProperty("RG", null, "Relationship group. Used to indicate that a set of relationships should be looked at in conjunction.");

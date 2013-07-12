@@ -87,10 +87,10 @@
 							<!-- Use this to (optionally) specify the folder where you want the temp SQL DB loaded (by default, this goes in the target folder) -->
 							<!-- tmpDBPath>/mnt/d/Scratch/</tmpDBPath-->
 							<!-- Use this to further restrict the output from metamorphosys by SAB (optional - when left out, all data is loaded) -->
-							<sabFilters>
+							<!--sabFilters>
 								<sabFilter>CST</sabFilter>
 								<sabFilter>CPM</sabFilter>
-							</sabFilters>
+							</sabFilters-->
 						</configuration>
 						<goals>
 							<goal>buildUMLS</goal>

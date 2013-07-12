@@ -15,5 +15,6 @@ public class PT_IDs extends BPT_IDs
 		addProperty("AUI", null, "Unique identifier for atom - variable length field, 8 or 9 characters");
 		addProperty("TUI", null, "Unique identifier of Semantic Type");
 		addProperty("RUI", null, "Unique identifier of Relationship");
+		addProperty("ATUI", null, "Unique identifier of Attribute");
 	}
 }

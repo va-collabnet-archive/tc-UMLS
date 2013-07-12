@@ -33,6 +33,7 @@ import java.util.Set;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.ihtsdo.etypes.EConcept;
 import org.ihtsdo.tk.dto.concept.component.TkComponent;
+import org.ihtsdo.tk.dto.concept.component.description.TkDescription;
 import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
 
 /**
@@ -45,7 +46,9 @@ import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
 public class UMLSMojo extends BaseConverter 
 {
 	private PropertyType ptSTT_Types_;
-	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, cuiRelStatementForward, auiRelStatementForward, cuiRelStatementBackward, auiRelStatementBackward;
+	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, 
+		cuiRelStatementForward, auiRelStatementForward, cuiRelStatementBackward, auiRelStatementBackward,
+		definitionStatement;
 	
 	private EConcept allRefsetConcept_;
 	private EConcept allCUIRefsetConcept_;
@@ -131,6 +134,7 @@ public class UMLSMojo extends BaseConverter
 			satAtomStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI = ? " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
 			satConceptStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI is null " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
 			semanticTypeStatement = db_.getConnection().prepareStatement("select TUI, ATUI, CVF from MRSTY where CUI = ?");
+			definitionStatement = db_.getConnection().prepareStatement("select * from MRDEF where CUI = ? and AUI = ?");
 			
 			//UMLS and RXNORM do different things with rels - UMLS never has null CUI's, while RxNorm always has null CUI's (when AUI is specified)
 			//Also need to join back to MRCONSO for the cases where we are applying a SAB filter, to make sure both the source and the target are things that will be loaded.
@@ -167,7 +171,6 @@ public class UMLSMojo extends BaseConverter
 			allAUIRefsetConcept_ = ptUMLSRefsets_.getConcept(ptUMLSRefsets_.AUI_CONCEPTS.getSourcePropertyNameFSN());
 			
 			// Add version data to allRefsetConcept
-			//TODO move this to a root concept, if I can find one...
 			eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
 			eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
 			
@@ -209,6 +212,7 @@ public class UMLSMojo extends BaseConverter
 			satAtomStatement.close();
 			satConceptStatement.close();
 			semanticTypeStatement.close();
+			definitionStatement.close();
 			cuiRelStatementForward.close();
 			cuiRelStatementBackward.close();
 			auiRelStatementBackward.close();
@@ -268,13 +272,13 @@ public class UMLSMojo extends BaseConverter
 		{
 			HashSet<String> filesToSkip = new HashSet<>();
 			filesToSkip.add("MRHIST.RRF");  //snomed history - already in the WB.
-			filesToSkip.add("MRHIER.RRF");  //don't think I need this - but maybe, to find the root concept
 			filesToSkip.add("MRMAP.RRF");  //not doing mappings yet
 			filesToSkip.add("MRSMAP.RRF");  //not doing mappings yet
 			filesToSkip.add("CHANGE/*");  //not loading these yet
 			filesToSkip.add("MRAUI.RRF");  //don't need - historical info
-			filesToSkip.add("MRX*");
-			
+			filesToSkip.add("MRCUI.RRF");  //retired CUIs
+			filesToSkip.add("MRX*");  //indexes - don't need
+ 			
 			List<TableDefinition> tables = db_.loadTableDefinitionsFromMRCOLS(new FileInputStream(new File(meta, "MRFILES.RRF")), 
 					new FileInputStream(new File(meta, "MRCOLS.RRF")), filesToSkip);
 
@@ -316,6 +320,8 @@ public class UMLSMojo extends BaseConverter
 			s.execute("CREATE INDEX rel_1_index ON MRREL (CUI1, AUI1)");
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX rel_rela_index ON MRREL (RELA)");  //helps with rel metadata
+			ConsoleUtil.showProgress();
+			s.execute("CREATE INDEX paui_index ON MRHIER (PAUI)");  //for looking up if a term has roots
 			s.close();
 		}
 	}
@@ -346,12 +352,14 @@ public class UMLSMojo extends BaseConverter
 		eConcepts_.loadMetaDataItems(ptSTT_Types_, metaDataRoot_, dos_);
 	}
 	
+	//TODO load the rest of the MRDOC types as metadata, use as UUID annotations instead of STR...
+	
 	@Override
 	protected void addCustomRefsets(BPT_Refsets refset) throws Exception
 	{
 		//noop
 	}
-	
+	//TODO nested attributes on SCUI, SLUI, code?  Take another look at how I query the SAT file.
 	@Override
 	protected void processSAT(TkComponent<?> itemToAnnotate, ResultSet rs) throws SQLException
 	{
@@ -396,6 +404,7 @@ public class UMLSMojo extends BaseConverter
 			
 			if (atui != null)
 			{
+				//TODO should this be an ID?
 				eConcepts_.addStringAnnotation(attribute, atui, ptUMLSAttributes_.getProperty("ATUI").getUUID(), false);
 			}
 			
@@ -486,7 +495,6 @@ public class UMLSMojo extends BaseConverter
 			
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ts, ptUMLSAttributes_.getProperty("TS").getUUID(), false);
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.lui, ptUMLSAttributes_.getProperty("LUI").getUUID(), false);
-			eConcepts_.addStringAnnotation(auiConcept, consoRowData.stt, ptUMLSAttributes_.getProperty("STT").getUUID(), false);
 			eConcepts_.addUuidAnnotation(auiConcept, ptSTT_Types_.getProperty(consoRowData.stt).getUUID(), ptUMLSAttributes_.getProperty("STT").getUUID());
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.sui, ptUMLSAttributes_.getProperty("SUI").getUUID(), false);
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ispref, ptUMLSAttributes_.getProperty("ISPREF").getUUID(), false);
@@ -500,7 +508,7 @@ public class UMLSMojo extends BaseConverter
 			{
 				eConcepts_.addStringAnnotation(auiConcept, consoRowData.scui, ptUMLSAttributes_.getProperty("SCUI").getUUID(), false);
 			}
-			if (consoRowData.scui != null)
+			if (consoRowData.sdui != null)
 			{
 				eConcepts_.addStringAnnotation(auiConcept, consoRowData.sdui, ptUMLSAttributes_.getProperty("SDUI").getUUID(), false);
 			}
@@ -537,6 +545,9 @@ public class UMLSMojo extends BaseConverter
 			ResultSet rs = satAtomStatement.executeQuery();
 			processSAT(auiConcept.getConceptAttributes(), rs);
 			
+			//Add Definitions
+			addDefinitions(auiConcept, consoRowData.cui, consoRowData.aui);
+			
 			//Add rel to parent CUI
 			eConcepts_.addRelationship(auiConcept, cuiConcept.getPrimordialUuid());
 			
@@ -545,14 +556,21 @@ public class UMLSMojo extends BaseConverter
 			eConcepts_.addRefsetMember(ptRefsets_.get(consoRowData.sab).getConcept(terminologyAUIRefsetPropertyName_) , auiConcept.getPrimordialUuid(), null, true, null);
 			
 			auiRelStatementForward.clearParameters();
-			auiRelStatementForward.setString(1, conceptData.get(0).cui);
+			auiRelStatementForward.setString(1, consoRowData.cui);
 			auiRelStatementForward.setString(2, consoRowData.aui);
 			addRelationships(auiConcept, auiRelStatementForward.executeQuery(), true);
 			
 			auiRelStatementBackward.clearParameters();
-			auiRelStatementBackward.setString(1, conceptData.get(0).cui);
+			auiRelStatementBackward.setString(1, consoRowData.cui);
 			auiRelStatementBackward.setString(2, consoRowData.aui);
 			addRelationships(auiConcept, auiRelStatementBackward.executeQuery(), false);
+			
+			//If root concept, add rel to UMLS root concept
+			if (isRootConcept(consoRowData.cui, consoRowData.aui))
+			{
+				eConcepts_.addRelationship(auiConcept, umlsRootConcept_);
+			}
+			
 			auiConcept.writeExternal(dos_);
 		}
 		
@@ -584,6 +602,44 @@ public class UMLSMojo extends BaseConverter
 		eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
 		eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
 		cuiConcept.writeExternal(dos_);
+	}
+	
+	private void addDefinitions(EConcept concept, String cui, String aui) throws SQLException
+	{
+		definitionStatement.clearParameters();
+		definitionStatement.setString(1, cui);
+		definitionStatement.setString(2, aui);
+		ResultSet rs = definitionStatement.executeQuery();
+		while (rs.next())
+		{
+			String atui = rs.getString("ATUI");
+			String satui = rs.getString("SATUI");
+			String sab = rs.getString("SAB");
+			String def = rs.getString("DEF");
+			String suppress = rs.getString("SUPPRESS");
+			String cvf = rs.getString("CVF");
+			
+			TkDescription d = eConcepts_.addDescription(concept, ConverterUUID.createNamespaceUUIDFromString("ATUI" + atui, false), 
+					def, DescriptionType.DEFINITION, false, null, null, false);
+			
+			//TODO ID or string?
+			eConcepts_.addAdditionalIds(d, atui, ptIds_.getProperty("ATUI").getUUID());
+			
+			if (satui != null)
+			{
+				eConcepts_.addStringAnnotation(d, satui, ptUMLSAttributes_.getProperty("SATUI").getUUID(), false);
+			}
+			eConcepts_.addUuidAnnotation(d, ptSABs_.getProperty(sab).getUUID(), ptUMLSAttributes_.getProperty("SAB").getUUID());
+			
+			if (suppress != null)
+			{
+				eConcepts_.addUuidAnnotation(d, ptSuppress_.getProperty(suppress).getUUID(), ptUMLSAttributes_.getProperty("SUPPRESS").getUUID());
+			}
+			if (cvf != null)
+			{
+				eConcepts_.addStringAnnotation(d, cvf.toString(), ptUMLSAttributes_.getProperty("CVF").getUUID(), false);
+			}
+		}
 	}
 
 

@@ -27,8 +27,10 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Set;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.ihtsdo.etypes.EConcept;
@@ -45,7 +47,7 @@ import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
  */
 public class UMLSMojo extends BaseConverter 
 {
-	private PropertyType ptSTT_Types_;
+	private PropertyType ptSTT_Types_, ptTermStatus_;
 	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, 
 		cuiRelStatementForward, auiRelStatementForward, cuiRelStatementBackward, auiRelStatementBackward,
 		definitionStatement;
@@ -53,6 +55,8 @@ public class UMLSMojo extends BaseConverter
 	private EConcept allRefsetConcept_;
 	private EConcept allCUIRefsetConcept_;
 	private EConcept allAUIRefsetConcept_;
+	
+	private HashMap<String, String> umlsReleaseInfo = new HashMap<>();
 	
 	/**
 	 * Where UMLS source files are
@@ -173,6 +177,11 @@ public class UMLSMojo extends BaseConverter
 			// Add version data to allRefsetConcept
 			eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
 			eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
+			
+			for (Entry<String, String> relInfo : umlsReleaseInfo.entrySet())
+			{
+				eConcepts_.addStringAnnotation(allRefsetConcept_, relInfo.getValue(), ptContentVersion_.getProperty(relInfo.getKey()).getUUID(), false);
+			}
 			
 			//Disable the masterUUID debug map now that the metadata is populated, not enough memory on most systems to maintain it for everything else.
 			//ConverterUUID.disableUUIDMap_ = true;
@@ -329,37 +338,39 @@ public class UMLSMojo extends BaseConverter
 	protected void loadCustomMetaData() throws Exception
 	{
 		//STT Types
-		ptSTT_Types_= new PropertyType("STT Types"){};
+		ptSTT_Types_= xDocLoaderHelper("STT", "STT Types", false);
+		
+		ptTermStatus_ = xDocLoaderHelper("TS", "Term Status", false);
+		
+		//RELEASE
+		
+		Statement s = db_.getConnection().createStatement();
+		ResultSet rs = s.executeQuery("SELECT VALUE, TYPE, EXPL FROM " + tablePrefix_ + "DOC where DOCKEY='RELEASE'");
+		while (rs.next())
 		{
-			Statement s = db_.getConnection().createStatement();
-			ResultSet rs = s.executeQuery("SELECT DISTINCT VALUE, TYPE, EXPL FROM MRDOC where DOCKEY ='STT'");
-			while (rs.next())
-			{
-				String stt = rs.getString("VALUE");
-				String type = rs.getString("TYPE");
-				String expl = rs.getString("EXPL");
+			String value = rs.getString("VALUE");
+			String type = rs.getString("TYPE");
+			String name = rs.getString("EXPL");
 
-				if (!type.equals("expanded_form"))
-				{
-					throw new RuntimeException("Unexpected type in the attribute data within DOC: '" + type + "'");
-				}				
-				
-				ptSTT_Types_.addProperty(stt, expl, null);
+			if (!type.equals("release_info"))
+			{
+				throw new RuntimeException("Unexpected type in the attribute data within DOC: '" + type + "'");
 			}
-			rs.close();
-			s.close();
+			
+			ptContentVersion_.addProperty(value);
+			umlsReleaseInfo.put(value, name);
 		}
-		eConcepts_.loadMetaDataItems(ptSTT_Types_, metaDataRoot_, dos_);
+		rs.close();
+		s.close();
+		
 	}
-	
-	//TODO load the rest of the MRDOC types as metadata, use as UUID annotations instead of STR...
 	
 	@Override
 	protected void addCustomRefsets(BPT_Refsets refset) throws Exception
 	{
 		//noop
 	}
-	//TODO nested attributes on SCUI, SLUI, code?  Take another look at how I query the SAT file.
+
 	@Override
 	protected void processSAT(TkComponent<?> itemToAnnotate, ResultSet rs) throws SQLException
 	{
@@ -382,6 +393,8 @@ public class UMLSMojo extends BaseConverter
 			TkRefsetStrMember attribute = eConcepts_.addStringAnnotation(itemToAnnotate, ConverterUUID.createNamespaceUUIDFromString("ATUI" + atui), atv, 
 					ptTermAttributes_.get(sab).getProperty(atn).getUUID(), false, null);
 			
+			eConcepts_.addAdditionalIds(attribute, atui, ptIds_.getProperty("ATUI").getUUID());
+			
 			if (lui != null)
 			{
 				eConcepts_.addStringAnnotation(attribute, lui, ptUMLSAttributes_.getProperty("LUI").getUUID(), false);
@@ -400,12 +413,6 @@ public class UMLSMojo extends BaseConverter
 			if (code != null)
 			{
 				eConcepts_.addStringAnnotation(attribute, code, ptUMLSAttributes_.getProperty("CODE").getUUID(), false);
-			}
-			
-			if (atui != null)
-			{
-				//TODO should this be an ID?
-				eConcepts_.addStringAnnotation(attribute, atui, ptUMLSAttributes_.getProperty("ATUI").getUUID(), false);
 			}
 			
 			if (satui != null)
@@ -493,12 +500,11 @@ public class UMLSMojo extends BaseConverter
 				ConsoleUtil.printErrorln("Non-english lang settings not handled yet!");
 			}
 			
-			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ts, ptUMLSAttributes_.getProperty("TS").getUUID(), false);
+			eConcepts_.addUuidAnnotation(auiConcept, ptTermStatus_.getProperty(consoRowData.ts).getUUID(), ptUMLSAttributes_.getProperty("TS").getUUID());
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.lui, ptUMLSAttributes_.getProperty("LUI").getUUID(), false);
 			eConcepts_.addUuidAnnotation(auiConcept, ptSTT_Types_.getProperty(consoRowData.stt).getUUID(), ptUMLSAttributes_.getProperty("STT").getUUID());
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.sui, ptUMLSAttributes_.getProperty("SUI").getUUID(), false);
 			eConcepts_.addStringAnnotation(auiConcept, consoRowData.ispref, ptUMLSAttributes_.getProperty("ISPREF").getUUID(), false);
-
 			
 			if (consoRowData.saui != null)
 			{
@@ -622,7 +628,6 @@ public class UMLSMojo extends BaseConverter
 			TkDescription d = eConcepts_.addDescription(concept, ConverterUUID.createNamespaceUUIDFromString("ATUI" + atui, false), 
 					def, DescriptionType.DEFINITION, false, null, null, false);
 			
-			//TODO ID or string?
 			eConcepts_.addAdditionalIds(d, atui, ptIds_.getProperty("ATUI").getUUID());
 			
 			if (satui != null)

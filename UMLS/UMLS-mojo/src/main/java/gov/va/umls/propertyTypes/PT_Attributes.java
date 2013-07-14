@@ -29,7 +29,6 @@ public class PT_Attributes extends BPT_Attributes
 		addProperty("CVF", null, "Content View Flag. Bit field used to flag rows included in Content View.");
 		addProperty("METAUI", null, "Metathesaurus atom identifier (will have a leading A) or Metathesaurus relationship identifier (will have a leading R) or blank if it is a concept attribute.");
 		addProperty("STYPE", null, "The name of the column in MRCONSO.RRF or MRREL.RRF that contains the identifier to which the attribute is attached, i.e. AUI, CODE, CUI, RUI, SCUI, SDUI.");
-		addProperty("ATUI", null, "Unique identifier for attribute");
 		addProperty("SATUI", null, "Source asserted attribute identifier (optional - present if it exists)");
 		addProperty("STYPE1", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the first element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
 		addProperty("STYPE2", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the second element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");

@@ -82,10 +82,10 @@
 						<id>buildUMLS</id>
 						<configuration>
 							<!-- Point this path to your output from metamorphosys - the folder with the version name. -->
-							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted/2013AA/</srcDataPath-->
-							<srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/</srcDataPath>
+							<srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/</srcDataPath>
+							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/</srcDataPath-->
 							<!-- Use this to (optionally) specify the folder where you want the temp SQL DB loaded (by default, this goes in the target folder) -->
-							<!-- tmpDBPath>/mnt/d/Scratch/</tmpDBPath-->
+							<tmpDBPath>/mnt/d/Scratch/Full-vsab</tmpDBPath>
 							<!-- Use this to further restrict the output from metamorphosys by SAB (optional - when left out, all data is loaded) -->
 							<!--sabFilters>
 								<sabFilter>CST</sabFilter>

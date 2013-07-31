@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.ihtsdo.etypes.EConcept;
 import org.ihtsdo.tk.dto.concept.component.TkComponent;
@@ -48,13 +49,6 @@ import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
  */
 public class UMLSMojo extends BaseConverter 
 {
-	
-	// ICD-9-CM  
-//	o ICD-10-CM 
-//	o HCPCS (HIPAA)
-//	o CPT (HIPAA)
-//	o NDC (FDA National Drug Code to be added as a property on RxNorm Concepts
-	
 	private PropertyType ptSTT_Types_, ptTermStatus_;
 	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, 
 		cuiRelStatementForward, auiRelStatementForward, cuiRelStatementBackward, auiRelStatementBackward,
@@ -63,6 +57,8 @@ public class UMLSMojo extends BaseConverter
 	private EConcept allRefsetConcept_;
 	private EConcept allCUIRefsetConcept_;
 	private EConcept allAUIRefsetConcept_;
+	
+	private HashMap<String, AtomicInteger> mishandledLanguages_ = new HashMap<>();
 	
 	private HashMap<String, String> umlsReleaseInfo = new HashMap<>();
 	
@@ -192,7 +188,7 @@ public class UMLSMojo extends BaseConverter
 			}
 			
 			//Disable the masterUUID debug map now that the metadata is populated, not enough memory on most systems to maintain it for everything else.
-			//ConverterUUID.disableUUIDMap_ = true;
+			ConverterUUID.disableUUIDMap_ = true;
 			
 			//process
 			int cuiCounter = 0;
@@ -244,6 +240,15 @@ public class UMLSMojo extends BaseConverter
 			if (conceptData.size() > 0)
 			{
 				processCUIRows(conceptData);
+			}
+			
+			if (mishandledLanguages_.size() > 0)
+			{
+				ConsoleUtil.printErrorln("non-english lang settings not properly handled yet");
+				for (Entry<String, AtomicInteger> x : mishandledLanguages_.entrySet())
+				{
+					ConsoleUtil.printErrorln(x.getKey() + " - " + x.getValue().get());
+				}
 			}
 			
 			satAtomStatement.close();
@@ -567,7 +572,13 @@ public class UMLSMojo extends BaseConverter
 				// TODO handle language.
 				if (!rowData.lat.equals("ENG"))
 				{
-					ConsoleUtil.printErrorln("Non-english lang settings not handled yet!");
+					AtomicInteger i = mishandledLanguages_.get(rowData.lat);
+					if (i == null)
+					{
+						i = new AtomicInteger(0);
+						mishandledLanguages_.put(rowData.lat, i);
+					}
+					i.incrementAndGet();
 				}
 				
 				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("TS").getUUID(), ptTermStatus_.getProperty(rowData.ts).getUUID(), rowData.aui);

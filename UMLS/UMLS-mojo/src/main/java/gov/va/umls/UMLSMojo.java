@@ -198,7 +198,15 @@ public class UMLSMojo extends BaseConverter
 			int cuiCounter = 0;
 			
 			Statement statement = db_.getConnection().createStatement();
-			ResultSet rs = statement.executeQuery("select * from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryString_ : "") + " order by CUI");
+			
+			ResultSet rs = statement.executeQuery("select count (distinct CUI) from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryString_ : ""));
+			if (rs.next())
+			{
+				ConsoleUtil.println("CUIs to process: " + rs.getString(1));
+			}
+			rs.close();
+			
+			rs = statement.executeQuery("select * from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryString_ : "") + " order by CUI");
 			HashMap<String, ArrayList<MRCONSO>> conceptData = new HashMap<>();
 			while (rs.next())
 			{
@@ -211,7 +219,7 @@ public class UMLSMojo extends BaseConverter
 						ConsoleUtil.showProgress();
 					}
 					cuiCounter++;
-					if (cuiCounter % 10000 == 0)
+					if (cuiCounter % 1000 == 0)
 					{
 						ConsoleUtil.println("Processed " + cuiCounter + " CUIs creating " + eConcepts_.getLoadStats().getConceptCount() + " concepts");
 					}
@@ -233,7 +241,10 @@ public class UMLSMojo extends BaseConverter
 
 			
 			// process last
-			processCUIRows(conceptData);
+			if (conceptData.size() > 0)
+			{
+				processCUIRows(conceptData);
+			}
 			
 			satAtomStatement.close();
 			satConceptStatement.close();
@@ -347,11 +358,13 @@ public class UMLSMojo extends BaseConverter
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX rel_1_index ON MRREL (CUI1, AUI1)");
 			ConsoleUtil.showProgress();
+			s.execute("CREATE INDEX mrdef_cui_aui_index ON MRDEF (CUI, AUI)");
+			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX rel_rela_rel_index ON MRREL (RELA, REL)");  //helps with rel metadata
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX rel_sab_index ON MRREL (SAB)");  //helps with rel metadata
 			ConsoleUtil.showProgress();
-			s.execute("CREATE INDEX paui_index ON MRHIER (PAUI)");  //for looking up if a term has roots
+			s.execute("CREATE INDEX mrhier_paui_index ON MRHIER (PAUI)");  //for looking up if a term has roots
 			s.close();
 		}
 	}
@@ -722,11 +735,11 @@ public class UMLSMojo extends BaseConverter
 		mojo.outputDirectory = new File("../UMLS-econcept/target");
 		mojo.loaderVersion = "eclipse debug loader";
 		mojo.releaseVersion = "eclipse debug release";
-		//mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted/2013AA/");
-		mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/");
-		//mojo.tmpDBPath = new File("/mnt/d/Scratch/");
-		//mojo.sabFilters = new ArrayList<String>();
-		//mojo.SABFilterList.add("CCS");
+		mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/");
+		//mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/");
+		mojo.tmpDBPath = new File("/mnt/d/Scratch/Full-vsab");
+		mojo.sabFilters = new ArrayList<String>();
+		mojo.sabFilters.add("HLREL_1998");
 		mojo.execute();
 	}
 }

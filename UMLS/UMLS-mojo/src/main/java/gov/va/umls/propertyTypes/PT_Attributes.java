@@ -34,6 +34,7 @@ public class PT_Attributes extends BPT_Attributes
 		addProperty("STYPE1", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the first element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
 		addProperty("STYPE2", null, "The name of the column in MRCONSO.RRF that contains the identifier used for the second element in the relationship, i.e. AUI, CODE, CUI, SCUI, SDUI.");
 		addProperty("Generic rel type", null, "Generic rel type for this relationship");
+		addProperty("Generic rel type (inverse)", null, "Generic rel type for this relationship - however - the inverse of the generic rel type was indicated (mismatch between RELA primary/inverse naming and generic primary/inverse naming)");
 		addProperty("SRUI", null, "Source asserted relationship identifier, if present");
 		addProperty("SL", null, "Source of relationship labels");
 		addProperty("RG", null, "Relationship group. Used to indicate that a set of relationships should be looked at in conjunction.");

@@ -337,6 +337,8 @@ public class UMLSMojo extends BaseConverter
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX sat_metaui_index ON MRSAT (METAUI)");  //rel sat lookup
 			ConsoleUtil.showProgress();
+			s.execute("CREATE INDEX sat_sab_index ON MRSAT (SAB)");  //Helps with attribute metadata lookup
+			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX sty_cui_index ON MRSTY (CUI)");  //semantic type lookup
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX sty_tui_index ON MRSTY (TUI)");  //select distinct tui during metadata
@@ -345,7 +347,9 @@ public class UMLSMojo extends BaseConverter
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX rel_1_index ON MRREL (CUI1, AUI1)");
 			ConsoleUtil.showProgress();
-			s.execute("CREATE INDEX rel_rela_index ON MRREL (RELA)");  //helps with rel metadata
+			s.execute("CREATE INDEX rel_rela_rel_index ON MRREL (RELA, REL)");  //helps with rel metadata
+			ConsoleUtil.showProgress();
+			s.execute("CREATE INDEX rel_sab_index ON MRREL (SAB)");  //helps with rel metadata
 			ConsoleUtil.showProgress();
 			s.execute("CREATE INDEX paui_index ON MRHIER (PAUI)");  //for looking up if a term has roots
 			s.close();

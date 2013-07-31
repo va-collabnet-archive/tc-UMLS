@@ -10,6 +10,7 @@ public class PT_Attributes extends BPT_Attributes
 {
 	public PT_Attributes()
 	{
+		addProperty("AUI", null, "Unique identifier for atom - variable length field, 8 or 9 characters");  //Loaded an an attribute and an ID
 		addProperty("tty_class");
 		addProperty("STN", "Semantic Type tree number", null);
 		addProperty("STY", "Semantic Type", null);

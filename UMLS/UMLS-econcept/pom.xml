@@ -82,15 +82,37 @@
 						<id>buildUMLS</id>
 						<configuration>
 							<!-- Point this path to your output from metamorphosys - the folder with the version name. -->
-							<srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/</srcDataPath>
-							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-small/2013AA/</srcDataPath-->
+							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/</srcDataPath-->
+							<srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-requested/2013AA/</srcDataPath>
 							<!-- Use this to (optionally) specify the folder where you want the temp SQL DB loaded (by default, this goes in the target folder) -->
-							<tmpDBPath>/mnt/d/Scratch/Full-vsab</tmpDBPath>
+							<!--tmpDBPath>/mnt/d/Scratch/Full-vsab</tmpDBPath-->
 							<!-- Use this to further restrict the output from metamorphosys by SAB (optional - when left out, all data is loaded) -->
 							<!--sabFilters>
-								<sabFilter>CST</sabFilter>
-								<sabFilter>CPM</sabFilter>
+								<!- - Requested terminologies - ->
+								<sabFilter>ICD9CM_2013_2012_08_06</sabFilter>
+								<sabFilter>ICD10CM_2013</sabFilter>
+								<sabFilter>HCPCS2013</sabFilter>
+								<sabFilter>CPT2013</sabFilter>
+								<!- - Recommended by metamorphosis when the above is selected - ->
+								<sabFilter>HCDT2013</sabFilter>
+								<sabFilter>HCPT2013</sabFilter>
+								<sabFilter>MTHCH2013</sabFilter>
+								<sabFilter>MTHHH2013</sabFilter>
+								<sabFilter>MTHICD9_2013_2012_08_06</sabFilter>
 							</sabFilters-->
+							<sabFilters>
+								<!-- Requested terminologies -->
+								<sabFilter>ICD9CM</sabFilter>
+								<sabFilter>ICD10CM</sabFilter>
+								<sabFilter>HCPCS</sabFilter>
+								<sabFilter>CPT</sabFilter>
+								<!-- Recommended by metamorphosis when the above is selected -->
+								<sabFilter>HCDT</sabFilter>
+								<sabFilter>HCPT</sabFilter>
+								<sabFilter>MTHCH</sabFilter>
+								<sabFilter>MTHHH</sabFilter>
+								<sabFilter>MTHICD9</sabFilter>
+							</sabFilters>
 						</configuration>
 						<goals>
 							<goal>buildUMLS</goal>

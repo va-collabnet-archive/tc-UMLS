@@ -11,6 +11,7 @@ import gov.va.oia.terminology.converters.sharedUtils.stats.ConverterUUID;
 import gov.va.oia.terminology.converters.umlsUtils.BaseConverter;
 import gov.va.oia.terminology.converters.umlsUtils.RRFDatabaseHandle;
 import gov.va.oia.terminology.converters.umlsUtils.UMLSFileReader;
+import gov.va.oia.terminology.converters.umlsUtils.ValuePropertyPairWithAttributes;
 import gov.va.oia.terminology.converters.umlsUtils.rrf.REL;
 import gov.va.oia.terminology.converters.umlsUtils.sql.TableDefinition;
 import gov.va.umls.propertyTypes.PT_Attributes;
@@ -421,7 +422,7 @@ public class UMLSMojo extends BaseConverter
 	}
 
 	@Override
-	protected void processSAT(TkComponent<?> itemToAnnotate, ResultSet rs, String itemCode, String itemSab) throws SQLException
+	protected void processSAT(TkComponent<?> itemToAnnotate, ResultSet rs, String itemCode, String itemSab, boolean skipAuiAnnotation) throws SQLException
 	{
 		while (rs.next())
 		{
@@ -487,8 +488,11 @@ public class UMLSMojo extends BaseConverter
 			{
 				eConcepts_.addStringAnnotation(attribute, cvf.toString(), ptUMLSAttributes_.getProperty("CVF").getUUID(), false);
 			}
-			//Add an attribute that says which AUI this attribute came from
-			eConcepts_.addStringAnnotation(attribute, metaui, ptUMLSAttributes_.getProperty("METAUI").getUUID(), false);
+			if (!skipAuiAnnotation)
+			{
+				//Add an attribute that says which AUI this attribute came from
+				eConcepts_.addStringAnnotation(attribute, metaui, ptUMLSAttributes_.getProperty("METAUI").getUUID(), false);
+			}
 		}
 		rs.close();
 	}
@@ -560,13 +564,7 @@ public class UMLSMojo extends BaseConverter
 			
 			String sab = consoWithSameCodeSab.get(0).sab;
 			
-			ArrayList<ValuePropertyPair> codeSabDescriptions = new ArrayList<>();
-			
-			//Key the UUID for the concept for the column name to the unique values for the column  to the unique AUIs that say that 
-			HashMap<UUID, HashMap<String, HashSet<String>>> stringAttributes = new HashMap<>();
-			
-			//Key the UUID for the concept for the column name to the UUID of the concept that represents the unique values for the column to the unique AUIs that say that 
-			HashMap<UUID, HashMap<UUID, HashSet<String>>> uuidAttributes = new HashMap<>();
+			ArrayList<ValuePropertyPairWithAttributes> codeSabDescriptions = new ArrayList<>();
 			
 			ArrayList<REL> forwardRelationships = new ArrayList<>();
 			ArrayList<REL> backwardRelationships = new ArrayList<>();
@@ -575,6 +573,13 @@ public class UMLSMojo extends BaseConverter
 			{
 				//put it in as a string, so users can search for AUI
 				eConcepts_.addAdditionalIds(codeSabConcept, rowData.aui, ptIds_.getProperty("AUI").getUUID(), false);
+				
+				ValuePropertyPairWithAttributes desc = new ValuePropertyPairWithAttributes(rowData.str, ptDescriptions_.get(rowData.sab).getProperty(rowData.tty));
+				
+				if (consoWithSameCodeSab.size() > 1)
+				{
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("AUI").getUUID(), rowData.aui);
+				}
 				
 				// TODO handle language.
 				if (!rowData.lat.equals("ENG"))
@@ -588,43 +593,39 @@ public class UMLSMojo extends BaseConverter
 					i.incrementAndGet();
 				}
 				
-				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("TS").getUUID(), ptTermStatus_.getProperty(rowData.ts).getUUID(), rowData.aui);
+				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("TS").getUUID(), ptTermStatus_.getProperty(rowData.ts).getUUID());
 				
-				addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("LUI").getUUID(), rowData.lui, rowData.aui);
+				desc.addStringAttribute(ptUMLSAttributes_.getProperty("LUI").getUUID(), rowData.lui);
 				
-				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("STT").getUUID(), ptSTT_Types_.getProperty(rowData.stt).getUUID(), rowData.aui);
+				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("STT").getUUID(), ptSTT_Types_.getProperty(rowData.stt).getUUID());
 				
-				addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("SUI").getUUID(), rowData.sui, rowData.aui);
+				desc.addStringAttribute(ptUMLSAttributes_.getProperty("SUI").getUUID(), rowData.sui);
 				
-				addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("ISPREF").getUUID(), rowData.ispref, rowData.aui);
+				desc.addStringAttribute(ptUMLSAttributes_.getProperty("ISPREF").getUUID(), rowData.ispref);
 				
 				if (rowData.saui != null)
 				{
-					addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("SAUI").getUUID(), rowData.saui, rowData.aui);
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SAUI").getUUID(), rowData.saui);
 				}
 				if (rowData.scui != null)
 				{
-					addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("SCUI").getUUID(), rowData.scui, rowData.aui);
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SCUI").getUUID(), rowData.scui);
 				}
 				if (rowData.sdui != null)
 				{
-					addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("SDUI").getUUID(), rowData.sdui, rowData.aui);
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SDUI").getUUID(), rowData.sdui);
 				}
 				
-				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("SAB").getUUID(), ptSABs_.getProperty(rowData.sab).getUUID(), rowData.aui);
+				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SAB").getUUID(), ptSABs_.getProperty(rowData.sab).getUUID());
+
+				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SRL").getUUID(), ptSourceRestrictionLevels_.getProperty(rowData.srl.toString()).getUUID());
 	
-				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("SRL").getUUID(), 
-						ptSourceRestrictionLevels_.getProperty(rowData.srl.toString()).getUUID(), rowData.aui);
-	
-				addAttributeToGroup(uuidAttributes, ptUMLSAttributes_.getProperty("SUPPRESS").getUUID(), 
-						ptSuppress_.getProperty(rowData.suppress).getUUID(), rowData.aui);
+				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SUPPRESS").getUUID(), ptSuppress_.getProperty(rowData.suppress).getUUID());
 				
 				if (rowData.cvf != null)
 				{
-					addAttributeToGroup(stringAttributes, ptUMLSAttributes_.getProperty("CVF").getUUID(), rowData.cvf.toString(), rowData.aui);
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("CVF").getUUID(), rowData.cvf.toString());
 				}
-				
-				ValuePropertyPair desc = new ValuePropertyPair(rowData.str, ptDescriptions_.get(rowData.sab).getProperty(rowData.tty));
 				
 				//used for sorting description to find one for the CUI concept
 				cuiDescriptions.add(desc);
@@ -636,10 +637,10 @@ public class UMLSMojo extends BaseConverter
 				satAtomStatement.setString(1, rowData.cui);
 				satAtomStatement.setString(2, rowData.aui);
 				ResultSet rs = satAtomStatement.executeQuery();
-				processSAT(codeSabConcept.getConceptAttributes(), rs, rowData.code, rowData.sab);
+				processSAT(codeSabConcept.getConceptAttributes(), rs, rowData.code, rowData.sab, consoWithSameCodeSab.size() == 1);
 				
 				//Add Definitions
-				addDefinitions(codeSabConcept, rowData.cui, rowData.aui, sab);
+				addDefinitions(codeSabConcept, rowData.cui, rowData.aui, sab, consoWithSameCodeSab.size() == 1);
 
 				auiRelStatementForward.clearParameters();
 				auiRelStatementForward.setString(1, rowData.cui);
@@ -659,9 +660,6 @@ public class UMLSMojo extends BaseConverter
 				}
 			}
 			
-			loadGroupStringAttributes(codeSabConcept.getConceptAttributes(), ptUMLSAttributes_.getProperty("AUI").getUUID(), stringAttributes);
-			loadGroupUUIDAttributes(codeSabConcept.getConceptAttributes(), ptUMLSAttributes_.getProperty("AUI").getUUID(), uuidAttributes);
-			
 			//Add rel to parent CUI
 			eConcepts_.addRelationship(codeSabConcept, cuiConcept.getPrimordialUuid(), ptUMLSRelationships_.UMLS_ATOM.getUUID(), null);
 			addRelationships(codeSabConcept, forwardRelationships);
@@ -671,7 +669,9 @@ public class UMLSMojo extends BaseConverter
 			eConcepts_.addRefsetMember(allAUIRefsetConcept_, codeSabConcept.getPrimordialUuid(), null, true, null);
 			eConcepts_.addRefsetMember(ptRefsets_.get(sab).getConcept(terminologyCodeRefsetPropertyName_.get(sab)) , codeSabConcept.getPrimordialUuid(), null, true, null);
 			
-			eConcepts_.addDescriptions(codeSabConcept, codeSabDescriptions);
+			List<TkDescription> addedDescriptions = eConcepts_.addDescriptions(codeSabConcept, codeSabDescriptions);
+			ValuePropertyPairWithAttributes.processAttributes(eConcepts_, codeSabDescriptions, addedDescriptions);
+
 			codeSabConcept.writeExternal(dos_);
 			//disabled debug code
 			//conceptUUIDsCreated_.add(codeSabConcept.getPrimordialUuid());
@@ -686,7 +686,7 @@ public class UMLSMojo extends BaseConverter
 		satConceptStatement.clearParameters();
 		satConceptStatement.setString(1, cui);
 		ResultSet rs = satConceptStatement.executeQuery();
-		processSAT(cuiConcept.getConceptAttributes(), rs, null, null);
+		processSAT(cuiConcept.getConceptAttributes(), rs, null, null, true);
 		
 		//add semantic types
 		semanticTypeStatement.clearParameters();
@@ -709,7 +709,7 @@ public class UMLSMojo extends BaseConverter
 		//conceptUUIDsCreated_.add(cuiConcept.getPrimordialUuid());
 	}
 	
-	private void addDefinitions(EConcept concept, String cui, String aui, String itemSab) throws SQLException
+	private void addDefinitions(EConcept concept, String cui, String aui, String itemSab, boolean skipAuiAnnotation) throws SQLException
 	{
 		definitionStatement.clearParameters();
 		definitionStatement.setString(1, cui);
@@ -748,8 +748,11 @@ public class UMLSMojo extends BaseConverter
 				eConcepts_.addStringAnnotation(d, cvf.toString(), ptUMLSAttributes_.getProperty("CVF").getUUID(), false);
 			}
 			
-			//add the source AUI for this definition
-			eConcepts_.addStringAnnotation(d, aui, ptUMLSAttributes_.getProperty("AUI").getUUID(), false);
+			if (!skipAuiAnnotation)
+			{
+				//add the source AUI for this definition
+				eConcepts_.addStringAnnotation(d, aui, ptUMLSAttributes_.getProperty("AUI").getUUID(), false);
+			}
 		}
 	}
 

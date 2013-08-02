@@ -118,10 +118,12 @@
 
 							<additionalRootConcepts>
 								<!-- SAB|CUI|AUI -->
-								<additionalRootConcept>ICD9CM|C0178237|A8359006</additionalRootConcept> <!-- ICD9 - DISEASES AND INJURIES -->
-								<additionalRootConcept>ICD9CM|C0184661|A8352133</additionalRootConcept> <!-- ICD9 - PROCEDURES -->
-								<additionalRootConcept>ICD9CM|C0376109|A16973088</additionalRootConcept> <!-- ICD9 - SUPPLEMENTARY CLASSIFICATION OF EXTERNAL CAUSES OF INJURY AND POISONING -->
-								<additionalRootConcept>ICD9CM|C2349817|A18090759</additionalRootConcept> <!-- ICD9 - SUPPLEMENTARY CLASSIFICATION OF FACTORS INFLUENCING HEALTH STATUS AND CONTACT WITH HEALTH SERVICES -->
+								<!-- oops - didn't need these after I added the SRC terminology
+								<additionalRootConcept>ICD9CM|C0178237|A8359006</additionalRootConcept> <!- - ICD9 - DISEASES AND INJURIES - ->
+								<additionalRootConcept>ICD9CM|C0184661|A8352133</additionalRootConcept> <!- - ICD9 - PROCEDURES - ->
+								<additionalRootConcept>ICD9CM|C0376109|A16973088</additionalRootConcept> <!- - ICD9 - SUPPLEMENTARY CLASSIFICATION OF EXTERNAL CAUSES OF INJURY AND POISONING - ->
+								<additionalRootConcept>ICD9CM|C2349817|A18090759</additionalRootConcept> <!- - ICD9 - SUPPLEMENTARY CLASSIFICATION OF FACTORS INFLUENCING HEALTH STATUS AND CONTACT WITH HEALTH SERVICES - ->
+								-->
 							</additionalRootConcepts>
 						</configuration>
 						<goals>

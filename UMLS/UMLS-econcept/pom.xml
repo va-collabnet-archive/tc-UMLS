@@ -105,14 +105,24 @@
 								<sabFilter>ICD9CM</sabFilter>
 								<sabFilter>ICD10CM</sabFilter>
 								<sabFilter>HCPCS</sabFilter>
+								<sabFilter>MTHHH</sabFilter>  <!-- Need for HCPCS Hierarchy -->
 								<sabFilter>CPT</sabFilter>
+								<sabFilter>MTHCH</sabFilter>  <!-- Need for CPT Hierarchy -->
+								<sabFilter>SRC</sabFilter>  <!-- Need for Hierarchies -->
+								
 								<!-- Recommended by metamorphosis when the above is selected -->
-								<sabFilter>HCDT</sabFilter>
+								<!-- sabFilter>HCDT</sabFilter>
 								<sabFilter>HCPT</sabFilter>
-								<sabFilter>MTHCH</sabFilter>
-								<sabFilter>MTHHH</sabFilter>
-								<sabFilter>MTHICD9</sabFilter>
+								<sabFilter>MTHICD9</sabFilter-->
 							</sabFilters>
+
+							<additionalRootConcepts>
+								<!-- SAB|CUI|AUI -->
+								<additionalRootConcept>ICD9CM|C0178237|A8359006</additionalRootConcept> <!-- ICD9 - DISEASES AND INJURIES -->
+								<additionalRootConcept>ICD9CM|C0184661|A8352133</additionalRootConcept> <!-- ICD9 - PROCEDURES -->
+								<additionalRootConcept>ICD9CM|C0376109|A16973088</additionalRootConcept> <!-- ICD9 - SUPPLEMENTARY CLASSIFICATION OF EXTERNAL CAUSES OF INJURY AND POISONING -->
+								<additionalRootConcept>ICD9CM|C2349817|A18090759</additionalRootConcept> <!-- ICD9 - SUPPLEMENTARY CLASSIFICATION OF FACTORS INFLUENCING HEALTH STATUS AND CONTACT WITH HEALTH SERVICES -->
+							</additionalRootConcepts>
 						</configuration>
 						<goals>
 							<goal>buildUMLS</goal>

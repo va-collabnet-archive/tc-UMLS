@@ -112,6 +112,15 @@ public class UMLSMojo extends BaseConverter
 	 * @optional
 	 */
 	private List<String> sabFilters;
+	
+	/**
+	 * A list of SAB|CUI|AUI concept identifiers that should denote root concepts.  Each unique SAB concept will be marked as a root
+	 * and each uniqe CUI|AUI pair will be added as a child.
+	 * 
+	 * @parameter
+	 * @optional
+	 */
+	private List<String> additionalRootConcepts;
 
 	public void execute() throws MojoExecutionException
 	{
@@ -138,7 +147,7 @@ public class UMLSMojo extends BaseConverter
 
 			loadDatabase();
 			
-			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters);
+			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters, additionalRootConcepts);
 			
 			satAtomStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI = ? " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
 			satConceptStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI is null " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
@@ -643,9 +652,10 @@ public class UMLSMojo extends BaseConverter
 				backwardRelationships.addAll(REL.read(auiRelStatementBackward.executeQuery(), false, this));
 				
 				//If root concept, add rel to UMLS root concept
-				if (isRootConcept(rowData.cui, rowData.aui))
+				UUID parentConcept = isRootConcept(rowData.cui, rowData.aui);
+				if (parentConcept != null)
 				{
-					eConcepts_.addRelationship(codeSabConcept, umlsRootConcept_);
+					eConcepts_.addRelationship(codeSabConcept, parentConcept);
 				}
 			}
 			

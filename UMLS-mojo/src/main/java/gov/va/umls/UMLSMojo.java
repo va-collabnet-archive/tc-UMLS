@@ -661,7 +661,7 @@ public class UMLSMojo extends BaseConverter
 			}
 			
 			//Add rel to parent CUI
-			eConcepts_.addRelationship(codeSabConcept, cuiConcept.getPrimordialUuid(), ptUMLSRelationships_.UMLS_ATOM.getUUID(), null);
+			eConcepts_.addRelationship(codeSabConcept, cuiConcept.getPrimordialUuid(), ptUMLSRelationships_.UMLS_CUI.getUUID(), null);
 			addRelationships(codeSabConcept, forwardRelationships);
 			addRelationships(codeSabConcept, backwardRelationships);
 			

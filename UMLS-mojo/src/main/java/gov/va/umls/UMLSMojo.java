@@ -189,13 +189,13 @@ public class UMLSMojo extends BaseConverter
 			allCUIRefsetConcept_ = ptUMLSRefsets_.getConcept(ptUMLSRefsets_.CUI_CONCEPTS.getSourcePropertyNameFSN());
 			allAUIRefsetConcept_ = ptUMLSRefsets_.getConcept(ptUMLSRefsets_.TERM_CONCEPTS.getSourcePropertyNameFSN());
 			
-			// Add version data to allRefsetConcept
-			eConcepts_.addStringAnnotation(allRefsetConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
-			eConcepts_.addStringAnnotation(allRefsetConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
+			// Add version data to rootConcept
+			eConcepts_.addStringAnnotation(umlsRootConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
+			eConcepts_.addStringAnnotation(umlsRootConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
 			
 			for (Entry<String, String> relInfo : umlsReleaseInfo.entrySet())
 			{
-				eConcepts_.addStringAnnotation(allRefsetConcept_, relInfo.getValue(), ptContentVersion_.getProperty(relInfo.getKey()).getUUID(), false);
+				eConcepts_.addStringAnnotation(umlsRootConcept_, relInfo.getValue(), ptContentVersion_.getProperty(relInfo.getKey()).getUUID(), false);
 			}
 			
 			//Disable the masterUUID debug map now that the metadata is populated, not enough memory on most systems to maintain it for everything else.

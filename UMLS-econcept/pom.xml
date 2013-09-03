@@ -51,23 +51,24 @@
 					</execution>
 				</executions>
 			</plugin>
-				
 			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-install-plugin</artifactId>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>1.8</version>
 				<executions>
 					<execution>
-						<id>install-jbin-file</id>
-						<phase>install</phase>
+						<id>attach-artifacts</id>
+						<phase>package</phase>
 						<goals>
-							<goal>install-file</goal>
+							<goal>attach-artifact</goal>
 						</goals>
 						<configuration>
-							<file>${project.build.directory}/${project.build.finalName}.zip</file>
-							<groupId>${project.groupId}</groupId>
-							<artifactId>${project.artifactId}</artifactId>
-							<packaging>zip</packaging>
-							<version>${project.version}</version>
+							<artifacts>
+								<artifact>
+									<file>${project.build.directory}/${project.build.finalName}.zip</file>
+									<type>zip</type>
+								</artifact>
+							</artifacts>
 						</configuration>
 					</execution>
 				</executions>

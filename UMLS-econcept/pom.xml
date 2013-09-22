@@ -15,6 +15,8 @@
 
 	<properties>
 		<sourceData.version>2013AA</sourceData.version>
+		<snomed.version>2013.07.31-build-3</snomed.version>
+		<snomed-us-ext.version>20130301-loader-1.0</snomed-us-ext.version>
 	</properties>
 
 	<build>
@@ -73,7 +75,51 @@
 					</execution>
 				</executions>
 			</plugin>
-
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<executions>
+					<execution>
+						<!-- want to link to snomed concepts -->
+						<id>extract-snomed</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>unpack</goal>
+						</goals>
+						<configuration>
+							<artifactItems>
+								<artifactItem>
+									<groupId>org.ihtsdo.sct.baseline</groupId>
+									<artifactId>sct-econcept</artifactId>
+									<version>${snomed.version}</version>
+									<classifier>latest</classifier>
+									<type>zip</type>
+								</artifactItem>
+							</artifactItems>
+							<outputDirectory>${project.build.directory}/generated-resources/data/SCT</outputDirectory>
+						</configuration>
+					</execution>
+					<execution>
+						<!-- want to link to snomed us extension concepts -->
+						<id>extract-us-ext</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>unpack</goal>
+						</goals>
+						<configuration>
+							<artifactItems>
+								<artifactItem>
+									<groupId>gov.va.oia.terminology.converters</groupId>
+									<artifactId>us-extension-econcept</artifactId>
+									<version>${snomed-us-ext.version}</version>
+									<type>zip</type>
+								</artifactItem>
+							</artifactItems>
+							<outputDirectory>${project.build.directory}/generated-resources/data/SCT</outputDirectory>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>${project.groupId}</groupId>
 				<artifactId>UMLS-mojo</artifactId>
@@ -84,7 +130,7 @@
 						<configuration>
 							<!-- Point this path to your output from metamorphosys - the folder with the version name. -->
 							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/</srcDataPath-->
-							<srcDataPath>/mnt/d/scratch/UMLS/extracted-requested/2013AA/</srcDataPath>
+							<srcDataPath>/mnt/d/scratch/UMLS/extracted-requested-plusSCT/2013AA/</srcDataPath>
 							<!-- Use this to (optionally) specify the folder where you want the temp SQL DB loaded (by default, this goes in the target folder) -->
 							<!--tmpDBPath>/mnt/d/Scratch/Full-vsab</tmpDBPath-->
 							<!-- Use this to further restrict the output from metamorphosys by SAB (optional - when left out, all data is loaded) -->
@@ -100,6 +146,9 @@
 								<sabFilter>MTHCH2013</sabFilter>
 								<sabFilter>MTHHH2013</sabFilter>
 								<sabFilter>MTHICD9_2013_2012_08_06</sabFilter>
+								<!- -Grabbed for SCT rels - special handling - ->
+								<sabFilter>SCTUSX_2013_03_01</sabFilter>
+								<sabFilter>SNOMED_CT_2013_01_31</sabFilter>
 							</sabFilters-->
 							<sabFilters>
 								<!-- Requested terminologies -->
@@ -109,13 +158,25 @@
 								<sabFilter>MTHHH</sabFilter>  <!-- Need for HCPCS Hierarchy -->
 								<sabFilter>CPT</sabFilter>
 								<sabFilter>MTHCH</sabFilter>  <!-- Need for CPT Hierarchy -->
-								<sabFilter>SRC</sabFilter>  <!-- Need for Hierarchies -->
+								<sabFilter>SRC</sabFilter>  <!-- Need for Hierarchies - SRC isn't selectable in metathesaurus - you get it for free.-->
+								<sabFilter>SCTUSX</sabFilter>  <!-- special handling for Snomed terms -->
+								<sabFilter>SNOMEDCT</sabFilter>  <!-- special handling for Snomed terms -->
+								<sabFilter>MTH</sabFilter>  <!-- Include this so we get rels between CUIs -->
 								
 								<!-- Recommended by metamorphosis when the above is selected -->
 								<!-- sabFilter>HCDT</sabFilter>
 								<sabFilter>HCPT</sabFilter>
 								<sabFilter>MTHICD9</sabFilter-->
 							</sabFilters>
+							
+							<!-- Optional - input SNOMED jbin concept files - when  this parameter is provided, Snomed (and extensions) are 
+							handled special - in that the content isn't loaded from UMLS - but CUI concepts are still created (where necessary)
+							and relationships are added (and mapped to the workbench SCT representation) -->
+							<sctInputFile>${project.build.directory}/generated-resources/data/SCT</sctInputFile>
+							
+							<!-- Option - skip MTH concepts (we usually just want the rels between CUIs - so MTH has to be included above, but we will skip the AUI 
+							concepts and attributes, etc, if we set this variable -->
+							<skipMTHConcepts>true</skipMTHConcepts>
 
 							<additionalRootConcepts>
 								<!-- SAB|CUI|AUI -->

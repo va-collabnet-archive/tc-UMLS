@@ -18,9 +18,11 @@ import gov.va.umls.propertyTypes.PT_Attributes;
 import gov.va.umls.propertyTypes.PT_IDs;
 import gov.va.umls.rrf.MRCONSO;
 import java.io.BufferedReader;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -31,6 +33,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -40,6 +43,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.ihtsdo.etypes.EConcept;
 import org.ihtsdo.tk.dto.concept.component.TkComponent;
 import org.ihtsdo.tk.dto.concept.component.description.TkDescription;
+import org.ihtsdo.tk.dto.concept.component.identifier.TkIdentifier;
 import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
 
 /**
@@ -63,6 +67,8 @@ public class UMLSMojo extends BaseConverter
 	private HashMap<String, AtomicInteger> mishandledLanguages_ = new HashMap<>();
 	
 	private HashMap<String, String> umlsReleaseInfo = new HashMap<>();
+	
+	private HashMap<String, UUID> sctIDToUUID_ = null;
 	
 	/**
 	 * Where UMLS source files are
@@ -122,6 +128,26 @@ public class UMLSMojo extends BaseConverter
 	 * @optional
 	 */
 	private List<String> additionalRootConcepts;
+	
+	/**
+	 * Location of sct jbin data file. Expected to be a directory.
+	 * 
+	 * @parameter
+	 * @optional
+	 */
+	private File sctInputFile;
+	
+	/**
+	 * An optional flag to tell us to skip concepts with a SAB of MTH when processing concepts
+	 * (we often want to keep MTH in the subset to get the relationships)
+	 * @parameter
+	 * @optional
+	 */
+	private boolean skipMTHConcepts;
+	
+	
+	private HashMap<String, EConcept> pendingSCTRelatedConcepts_ = new HashMap<>();
+	private HashSet<String> usedSCTRelatedConceptsCUIs_ = new HashSet<>();
 
 	public void execute() throws MojoExecutionException
 	{
@@ -150,16 +176,28 @@ public class UMLSMojo extends BaseConverter
 			
 			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters, additionalRootConcepts);
 			
-			satAtomStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI = ? " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
-			satConceptStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI is null " + (sabQueryString_.length() > 0 ? "and " + sabQueryString_ : ""));
+			if (sctInputFile != null)
+			{
+				loadSCTInfo();
+			}
+			
+			String sabQueryStringMTHModified = sabQueryString_;
+			if (sabQueryString_.length() > 0 && skipMTHConcepts)
+			{
+				//yes, its MTH in VSAB or RSAB
+				sabQueryStringMTHModified = sabQueryStringMTHModified.replace(" or SAB='MTH'", "");
+			}
+			
+			satAtomStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI = ? " + (sabQueryString_.length() > 0 ? "and " + sabQueryStringMTHModified : ""));
+			satConceptStatement = db_.getConnection().prepareStatement("select * from MRSAT where CUI = ? and METAUI is null " + (sabQueryString_.length() > 0 ? "and " + sabQueryStringMTHModified : ""));
 			semanticTypeStatement = db_.getConnection().prepareStatement("select TUI, ATUI, CVF from MRSTY where CUI = ?");
 			definitionStatement = db_.getConnection().prepareStatement("select * from MRDEF where CUI = ? and AUI = ?");
 			
 			//UMLS and RXNORM do different things with rels - UMLS never has null CUI's, while RxNorm always has null CUI's (when AUI is specified)
 			//Also need to join back to MRCONSO for the cases where we are applying a SAB filter, to make sure both the source and the target are things that will be loaded.
 			
-			String sabQueryString1 = sabQueryString_.replaceAll("SAB", "r.SAB");
-			String sabQueryString2 = sabQueryString_.replaceAll("SAB", "MRCONSO.SAB");
+			String sabQueryString1 = sabQueryString_.replaceAll("SAB", "r.SAB");  //Allow the relsab to come from MTH
+			String sabQueryString2 = sabQueryStringMTHModified.replaceAll("SAB", "MRCONSO.SAB");  //don't allow the target to come from MTH
 			
 			cuiRelStatementForward = db_.getConnection().prepareStatement("SELECT r.CUI1, r.AUI1, r.STYPE1, r.REL, r.CUI2, r.AUI2, r.STYPE2, "
 					+ "r.RELA, r.RUI, r.SRUI, r.SAB, r.SL, r.DIR, r.RG, r.SUPPRESS, r.CVF from MRREL as r"  
@@ -174,14 +212,14 @@ public class UMLSMojo extends BaseConverter
 					+ (sabQueryString_.length() > 0 ? "and " + sabQueryString1 + "and r.CUI2 = MRCONSO.CUI and " + sabQueryString2: ""));
 
 			auiRelStatementForward = db_.getConnection().prepareStatement("SELECT r.CUI1, r.AUI1, r.STYPE1, r.REL, r.CUI2, r.AUI2, r.STYPE2, "
-					+ "r.RELA, r.RUI, r.SRUI, r.SAB, r.SL, r.DIR, r.RG, r.SUPPRESS, r.CVF, MRCONSO.SAB as targetSAB, MRCONSO.CODE as targetCODE from MRREL as r"  
-					+ (sabQueryString_.length() > 0 ? ", MRCONSO" : "")
+					+ "r.RELA, r.RUI, r.SRUI, r.SAB, r.SL, r.DIR, r.RG, r.SUPPRESS, r.CVF, MRCONSO.SAB as targetSAB, MRCONSO.CODE as targetCODE" 
+					+ " from MRREL as r, MRCONSO"
 					+ " WHERE CUI2 = ? and AUI2 = ? " 
 					+ (sabQueryString_.length() > 0 ? "and " + sabQueryString1 + "and r.CUI1 = MRCONSO.CUI and r.AUI1 = MRCONSO.AUI and " + sabQueryString2: ""));
 			
 			auiRelStatementBackward = db_.getConnection().prepareStatement("SELECT r.CUI1, r.AUI1, r.STYPE1, r.REL, r.CUI2, r.AUI2, r.STYPE2, "
-					+ "r.RELA, r.RUI, r.SRUI, r.SAB, r.SL, r.DIR, r.RG, r.SUPPRESS, r.CVF, MRCONSO.SAB as targetSAB, MRCONSO.CODE as targetCODE from MRREL as r"  
-					+ (sabQueryString_.length() > 0 ? ", MRCONSO" : "")
+					+ "r.RELA, r.RUI, r.SRUI, r.SAB, r.SL, r.DIR, r.RG, r.SUPPRESS, r.CVF, MRCONSO.SAB as targetSAB, MRCONSO.CODE as targetCODE" 
+					+ " from MRREL as r, MRCONSO"
 					+ " WHERE CUI1 = ? and AUI1 = ? " 
 					+ (sabQueryString_.length() > 0 ? "and " + sabQueryString1 + "and r.CUI2 = MRCONSO.CUI and r.AUI2 = MRCONSO.AUI and " + sabQueryString2: ""));
 			
@@ -206,14 +244,14 @@ public class UMLSMojo extends BaseConverter
 			
 			Statement statement = db_.getConnection().createStatement();
 			
-			ResultSet rs = statement.executeQuery("select count (distinct CUI) from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryString_ : ""));
+			ResultSet rs = statement.executeQuery("select count (distinct CUI) from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryStringMTHModified : ""));
 			if (rs.next())
 			{
 				ConsoleUtil.println("CUIs to process: " + rs.getString(1));
 			}
 			rs.close();
 			
-			rs = statement.executeQuery("select * from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryString_ : "") + " order by CUI");
+			rs = statement.executeQuery("select * from MRCONSO " + (sabQueryString_.length() > 0 ? " where " + sabQueryStringMTHModified : "") + " order by CUI");
 			HashMap<String, ArrayList<MRCONSO>> conceptData = new HashMap<>();
 			while (rs.next())
 			{
@@ -221,12 +259,12 @@ public class UMLSMojo extends BaseConverter
 				if (conceptData.size() > 0 && !conceptData.values().iterator().next().get(0).cui.equals(current.cui))
 				{
 					processCUIRows(conceptData);
-					if (cuiCounter % 10 == 0)
+					if (cuiCounter % 100 == 0)
 					{
 						ConsoleUtil.showProgress();
 					}
 					cuiCounter++;
-					if (cuiCounter % 1000 == 0)
+					if (cuiCounter % 10000 == 0)
 					{
 						ConsoleUtil.println("Processed " + cuiCounter + " CUIs creating " + eConcepts_.getLoadStats().getConceptCount() + " concepts");
 					}
@@ -270,6 +308,24 @@ public class UMLSMojo extends BaseConverter
 			cuiRelStatementBackward.close();
 			auiRelStatementBackward.close();
 			auiRelStatementForward.close();
+			
+			//Write out the pending SCT related CUI concepts, and SCT stub concepts with relationships to the CUI concepts
+			ConsoleUtil.println("Checking " + pendingSCTRelatedConcepts_.size() + " to see if any need to be written - " + usedSCTRelatedConceptsCUIs_.size() + " to check");
+			int cuiCount = 0;
+			
+			for (String cui : usedSCTRelatedConceptsCUIs_)
+			{
+				EConcept cuiConcept = pendingSCTRelatedConcepts_.remove(cui);
+				if (cuiConcept != null)
+				{
+					cuiCount++;
+					eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
+					eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
+					cuiConcept.writeExternal(dos_);
+				}
+			}
+
+			ConsoleUtil.println("Wrote out  " + cuiCount+ " SCT CUI concepts");
 			
 			finish(outputDirectory);
 			
@@ -549,6 +605,16 @@ public class UMLSMojo extends BaseConverter
 	{
 		String cui = conceptData.values().iterator().next().get(0).cui;
 		
+		boolean allSABsSnomedSpecial = true;
+		for (ArrayList<MRCONSO> consoWithSameCodeSab : conceptData.values())
+		{
+			if (!snomedSpecialHandling(consoWithSameCodeSab.get(0).sab))
+			{
+				allSABsSnomedSpecial = false;
+				break;
+			}
+		}
+		
 		EConcept cuiConcept = eConcepts_.createConcept(createCUIConceptUUID(cui));
 		eConcepts_.addAdditionalIds(cuiConcept, cui, ptIds_.getProperty("CUI").getUUID(), false);
 
@@ -556,125 +622,187 @@ public class UMLSMojo extends BaseConverter
 		
 		for (ArrayList<MRCONSO> consoWithSameCodeSab : conceptData.values())
 		{
-			//Use a combination of CUI/SAB/Code here - otherwise, we have problems with the "NOCODE" values
-			EConcept codeSabConcept = eConcepts_.createConcept(createCuiSabCodeConceptUUID(consoWithSameCodeSab.get(0).cui, 
-					consoWithSameCodeSab.get(0).sab, consoWithSameCodeSab.get(0).code));
-			
-			eConcepts_.addStringAnnotation(codeSabConcept, consoWithSameCodeSab.get(0).code, ptUMLSAttributes_.getProperty("CODE").getUUID(), false);
-			
 			String sab = consoWithSameCodeSab.get(0).sab;
 			
-			ArrayList<ValuePropertyPairWithAttributes> codeSabDescriptions = new ArrayList<>();
-			
-			ArrayList<REL> forwardRelationships = new ArrayList<>();
-			ArrayList<REL> backwardRelationships = new ArrayList<>();
-			
-			for (MRCONSO rowData : consoWithSameCodeSab)
+			if (snomedSpecialHandling(sab))
 			{
-				//put it in as a string, so users can search for AUI
-				eConcepts_.addAdditionalIds(codeSabConcept, rowData.aui, ptIds_.getProperty("AUI").getUUID(), false);
-				
-				ValuePropertyPairWithAttributes desc = new ValuePropertyPairWithAttributes(rowData.str, ptDescriptions_.get(rowData.sab).getProperty(rowData.tty));
-				
-				if (consoWithSameCodeSab.size() > 1)
+				//Just grab the descriptions for ranking purposes (for putting a description on the CUI concept)
+				//do nothing with the rest of the AUI based concepts
+				for (MRCONSO rowData : consoWithSameCodeSab)
 				{
-					desc.addStringAttribute(ptUMLSAttributes_.getProperty("AUI").getUUID(), rowData.aui);
+					cuiDescriptions.add(new ValuePropertyPairWithAttributes(rowData.str, ptDescriptions_.get(rowData.sab).getProperty(rowData.tty)));
+					//Don't do any relationships on these... we only want the rels that cross in and out of SCT - so we rely on the other terminologies
+					//to link into SCT.
 				}
 				
-				// TODO handle language.
-				if (!rowData.lat.equals("ENG"))
+				UUID snomedConceptId = sctIDToUUID_.get(consoWithSameCodeSab.get(0).code);
+				if (snomedConceptId != null)
 				{
-					AtomicInteger i = mishandledLanguages_.get(rowData.lat);
-					if (i == null)
-					{
-						i = new AtomicInteger(0);
-						mishandledLanguages_.put(rowData.lat, i);
-					}
-					i.incrementAndGet();
-				}
-				
-				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("TS").getUUID(), ptTermStatus_.getProperty(rowData.ts).getUUID());
-				
-				desc.addStringAttribute(ptUMLSAttributes_.getProperty("LUI").getUUID(), rowData.lui);
-				
-				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("STT").getUUID(), ptSTT_Types_.getProperty(rowData.stt).getUUID());
-				
-				desc.addStringAttribute(ptUMLSAttributes_.getProperty("SUI").getUUID(), rowData.sui);
-				
-				desc.addStringAttribute(ptUMLSAttributes_.getProperty("ISPREF").getUUID(), rowData.ispref);
-				
-				if (rowData.saui != null)
-				{
-					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SAUI").getUUID(), rowData.saui);
-				}
-				if (rowData.scui != null)
-				{
-					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SCUI").getUUID(), rowData.scui);
-				}
-				if (rowData.sdui != null)
-				{
-					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SDUI").getUUID(), rowData.sdui);
-				}
-				
-				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SAB").getUUID(), ptSABs_.getProperty(rowData.sab).getUUID());
-
-				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SRL").getUUID(), ptSourceRestrictionLevels_.getProperty(rowData.srl.toString()).getUUID());
-	
-				desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SUPPRESS").getUUID(), ptSuppress_.getProperty(rowData.suppress).getUUID());
-				
-				if (rowData.cvf != null)
-				{
-					desc.addStringAttribute(ptUMLSAttributes_.getProperty("CVF").getUUID(), rowData.cvf.toString());
-				}
-				
-				//used for sorting description to find one for the CUI concept
-				cuiDescriptions.add(desc);
-				//Used for picking the best description for this code/sab concept
-				codeSabDescriptions.add(desc);
-				
-				//Add Atom attributes
-				satAtomStatement.clearParameters();
-				satAtomStatement.setString(1, rowData.cui);
-				satAtomStatement.setString(2, rowData.aui);
-				ResultSet rs = satAtomStatement.executeQuery();
-				processSAT(codeSabConcept.getConceptAttributes(), rs, rowData.code, rowData.sab, consoWithSameCodeSab.size() == 1);
-				
-				//Add Definitions
-				addDefinitions(codeSabConcept, rowData.cui, rowData.aui, sab, consoWithSameCodeSab.size() == 1);
-
-				auiRelStatementForward.clearParameters();
-				auiRelStatementForward.setString(1, rowData.cui);
-				auiRelStatementForward.setString(2, rowData.aui);
-				forwardRelationships.addAll(REL.read(auiRelStatementForward.executeQuery(), true, this));
-				
-				auiRelStatementBackward.clearParameters();
-				auiRelStatementBackward.setString(1, rowData.cui);
-				auiRelStatementBackward.setString(2, rowData.aui);
-				backwardRelationships.addAll(REL.read(auiRelStatementBackward.executeQuery(), false, this));
-				
-				//If root concept, add rel to UMLS root concept
-				UUID parentConcept = isRootConcept(rowData.cui, rowData.aui);
-				if (parentConcept != null)
-				{
-					eConcepts_.addRelationship(codeSabConcept, parentConcept);
+					//Add rel to parent CUI - but load it in reverse, so we don't have to mess with SCT concepts
+					eConcepts_.addRelationship(cuiConcept, snomedConceptId, ptUMLSRelationships_.UMLS_CUI.getUUID(), null);
 				}
 			}
+			else
+			{
+				//Use a combination of CUI/SAB/Code here - otherwise, we have problems with the "NOCODE" values
+				EConcept codeSabConcept = eConcepts_.createConcept(createCuiSabCodeConceptUUID(consoWithSameCodeSab.get(0).cui, 
+						sab, consoWithSameCodeSab.get(0).code));
+				
+				eConcepts_.addStringAnnotation(codeSabConcept, consoWithSameCodeSab.get(0).code, ptUMLSAttributes_.getProperty("CODE").getUUID(), false);
+				
+				ArrayList<ValuePropertyPairWithAttributes> codeSabDescriptions = new ArrayList<>();
+				
+				ArrayList<REL> forwardRelationships = new ArrayList<>();
+				ArrayList<REL> backwardRelationships = new ArrayList<>();
+				
+				for (MRCONSO rowData : consoWithSameCodeSab)
+				{
+					//put it in as a string, so users can search for AUI
+					eConcepts_.addAdditionalIds(codeSabConcept, rowData.aui, ptIds_.getProperty("AUI").getUUID(), false);
+					
+					ValuePropertyPairWithAttributes desc = new ValuePropertyPairWithAttributes(rowData.str, ptDescriptions_.get(rowData.sab).getProperty(rowData.tty));
+					
+					if (consoWithSameCodeSab.size() > 1)
+					{
+						desc.addStringAttribute(ptUMLSAttributes_.getProperty("AUI").getUUID(), rowData.aui);
+					}
+					
+					// TODO handle language.
+					if (!rowData.lat.equals("ENG"))
+					{
+						AtomicInteger i = mishandledLanguages_.get(rowData.lat);
+						if (i == null)
+						{
+							i = new AtomicInteger(0);
+							mishandledLanguages_.put(rowData.lat, i);
+						}
+						i.incrementAndGet();
+					}
+					
+					desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("TS").getUUID(), ptTermStatus_.getProperty(rowData.ts).getUUID());
+					
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("LUI").getUUID(), rowData.lui);
+					
+					desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("STT").getUUID(), ptSTT_Types_.getProperty(rowData.stt).getUUID());
+					
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("SUI").getUUID(), rowData.sui);
+					
+					desc.addStringAttribute(ptUMLSAttributes_.getProperty("ISPREF").getUUID(), rowData.ispref);
+					
+					if (rowData.saui != null)
+					{
+						desc.addStringAttribute(ptUMLSAttributes_.getProperty("SAUI").getUUID(), rowData.saui);
+					}
+					if (rowData.scui != null)
+					{
+						desc.addStringAttribute(ptUMLSAttributes_.getProperty("SCUI").getUUID(), rowData.scui);
+					}
+					if (rowData.sdui != null)
+					{
+						desc.addStringAttribute(ptUMLSAttributes_.getProperty("SDUI").getUUID(), rowData.sdui);
+					}
+					
+					desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SAB").getUUID(), ptSABs_.getProperty(rowData.sab).getUUID());
+	
+					desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SRL").getUUID(), ptSourceRestrictionLevels_.getProperty(rowData.srl.toString()).getUUID());
+		
+					desc.addUUIDAttribute(ptUMLSAttributes_.getProperty("SUPPRESS").getUUID(), ptSuppress_.getProperty(rowData.suppress).getUUID());
+					
+					if (rowData.cvf != null)
+					{
+						desc.addStringAttribute(ptUMLSAttributes_.getProperty("CVF").getUUID(), rowData.cvf.toString());
+					}
+					
+					//used for sorting description to find one for the CUI concept
+					cuiDescriptions.add(desc);
+					//Used for picking the best description for this code/sab concept
+					codeSabDescriptions.add(desc);
+					
+					//Add Atom attributes
+					satAtomStatement.clearParameters();
+					satAtomStatement.setString(1, rowData.cui);
+					satAtomStatement.setString(2, rowData.aui);
+					ResultSet rs = satAtomStatement.executeQuery();
+					processSAT(codeSabConcept.getConceptAttributes(), rs, rowData.code, rowData.sab, consoWithSameCodeSab.size() == 1);
+					
+					//Add Definitions
+					addDefinitions(codeSabConcept, rowData.cui, rowData.aui, sab, consoWithSameCodeSab.size() == 1);
+	
+					auiRelStatementForward.clearParameters();
+					auiRelStatementForward.setString(1, rowData.cui);
+					auiRelStatementForward.setString(2, rowData.aui);
+					forwardRelationships.addAll(REL.read(rowData.sab, auiRelStatementForward.executeQuery(), true, this));
+					
+					auiRelStatementBackward.clearParameters();
+					auiRelStatementBackward.setString(1, rowData.cui);
+					auiRelStatementBackward.setString(2, rowData.aui);
+					backwardRelationships.addAll(REL.read(rowData.sab, auiRelStatementBackward.executeQuery(), false, this));
+					
+					//If root concept, add rel to UMLS root concept
+					UUID parentConcept = isRootConcept(rowData.cui, rowData.aui);
+					if (parentConcept != null)
+					{
+						eConcepts_.addRelationship(codeSabConcept, parentConcept);
+					}
+				}
 			
-			//Add rel to parent CUI
-			eConcepts_.addRelationship(codeSabConcept, cuiConcept.getPrimordialUuid(), ptUMLSRelationships_.UMLS_CUI.getUUID(), null);
-			addRelationships(codeSabConcept, forwardRelationships);
-			addRelationships(codeSabConcept, backwardRelationships);
-			
-			eConcepts_.addRefsetMember(allRefsetConcept_, codeSabConcept.getPrimordialUuid(), null, true, null);
-			eConcepts_.addRefsetMember(allAUIRefsetConcept_, codeSabConcept.getPrimordialUuid(), null, true, null);
-			eConcepts_.addRefsetMember(ptRefsets_.get(sab).getConcept(terminologyCodeRefsetPropertyName_.get(sab)) , codeSabConcept.getPrimordialUuid(), null, true, null);
-			
-			List<TkDescription> addedDescriptions = eConcepts_.addDescriptions(codeSabConcept, codeSabDescriptions);
-			ValuePropertyPairWithAttributes.processAttributes(eConcepts_, codeSabDescriptions, addedDescriptions);
-
-			codeSabConcept.writeExternal(dos_);
-			//disabled debug code
-			//conceptUUIDsCreated_.add(codeSabConcept.getPrimordialUuid());
+				//Add rel to parent CUI
+				eConcepts_.addRelationship(codeSabConcept, cuiConcept.getPrimordialUuid(), ptUMLSRelationships_.UMLS_CUI.getUUID(), null);
+				
+				//pre-preprocess the rels - change the target to the real SCT code for any targets that match...  also strip 
+				//and rels that miss (and we therefore have nothing to create the relationship to)
+				Iterator<REL> rels = forwardRelationships.iterator();
+				while (rels.hasNext())
+				{
+					REL rel = rels.next();
+					if (snomedSpecialHandling(rel.getTargetSAB()))
+					{
+						UUID temp = sctIDToUUID_.get(rel.getTargetCode());
+						if (temp != null)
+						{
+							rel.setSnomedUUIDTarget(temp);
+						}
+						else
+						{
+							rels.remove();
+							ConsoleUtil.printErrorln("Couldn't link to SCT CODE " + rel.getTargetCode());
+						}
+					}
+				}
+				
+				rels = backwardRelationships.iterator();
+				while (rels.hasNext())
+				{
+					REL rel = rels.next();
+					if (snomedSpecialHandling(rel.getTargetSAB()))
+					{
+						UUID temp = sctIDToUUID_.get(rel.getTargetCode());
+						if (temp != null)
+						{
+							rel.setSnomedUUIDTarget(temp);
+						}
+						else
+						{
+							rels.remove();
+							ConsoleUtil.printErrorln("Couldn't link to SCT CODE " + rel.getTargetCode());
+						}
+					}
+				}
+				
+				addRelationships(codeSabConcept, forwardRelationships);
+				addRelationships(codeSabConcept, backwardRelationships);
+				
+				eConcepts_.addRefsetMember(allRefsetConcept_, codeSabConcept.getPrimordialUuid(), null, true, null);
+				eConcepts_.addRefsetMember(allAUIRefsetConcept_, codeSabConcept.getPrimordialUuid(), null, true, null);
+				eConcepts_.addRefsetMember(ptRefsets_.get(sab).getConcept(terminologyCodeRefsetPropertyName_.get(sab)) , codeSabConcept.getPrimordialUuid(), null, true, null);
+				
+				List<TkDescription> addedDescriptions = eConcepts_.addDescriptions(codeSabConcept, codeSabDescriptions);
+				ValuePropertyPairWithAttributes.processAttributes(eConcepts_, codeSabDescriptions, addedDescriptions);
+	
+				codeSabConcept.writeExternal(dos_);
+				//disabled debug code
+				//conceptUUIDsCreated_.add(codeSabConcept.getPrimordialUuid());
+			}
 		}
 		
 		//Pick the 'best' description to use on the cui concept
@@ -696,15 +824,41 @@ public class UMLSMojo extends BaseConverter
 
 		cuiRelStatementForward.clearParameters();
 		cuiRelStatementForward.setString(1, cui);
-		addRelationships(cuiConcept, REL.read(cuiRelStatementForward.executeQuery(), true, this));
+		List<REL> relList = REL.read(null, cuiRelStatementForward.executeQuery(), true, this);
+		if (relList.size() > 0)
+		{
+			usedSCTRelatedConceptsCUIs_.add(cui);
+			for (REL r : relList)
+			{
+				usedSCTRelatedConceptsCUIs_.add(r.getTargetCUI());
+			}
+		}
+		addRelationships(cuiConcept, relList);
 		
 		cuiRelStatementBackward.clearParameters();
 		cuiRelStatementBackward.setString(1, cui);
-		addRelationships(cuiConcept, REL.read(cuiRelStatementBackward.executeQuery(), false, this));
+		relList = REL.read(null, cuiRelStatementBackward.executeQuery(), false, this);
+		if (relList.size() > 0)
+		{
+			usedSCTRelatedConceptsCUIs_.add(cui);
+			for (REL r : relList)
+			{
+				usedSCTRelatedConceptsCUIs_.add(r.getTargetCUI());
+			}
+		}
+		addRelationships(cuiConcept, relList);
 
-		eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
-		eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
-		cuiConcept.writeExternal(dos_);
+		if (allSABsSnomedSpecial)
+		{
+			//might not need to write this one.
+			pendingSCTRelatedConcepts_.put(cui, cuiConcept);
+		}
+		else
+		{
+			eConcepts_.addRefsetMember(allRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
+			eConcepts_.addRefsetMember(allCUIRefsetConcept_, cuiConcept.getPrimordialUuid(), null, true, null);
+			cuiConcept.writeExternal(dos_);
+		}
 		//disabled debug code
 		//conceptUUIDsCreated_.add(cuiConcept.getPrimordialUuid());
 	}
@@ -754,6 +908,86 @@ public class UMLSMojo extends BaseConverter
 				eConcepts_.addStringAnnotation(d, aui, ptUMLSAttributes_.getProperty("AUI").getUUID(), false);
 			}
 		}
+	}
+	
+	@Override
+	protected boolean specialHandling(String sab)
+	{
+		if (sab.equals("MTH"))
+		{
+			return skipMTHConcepts;
+		}
+		else
+		{
+			return snomedSpecialHandling(sab);
+		}
+	}
+	
+	
+	private boolean snomedSpecialHandling(String sab)
+	{
+		if (sctIDToUUID_ == null)
+		{
+			return false;
+		}
+		
+		if (sab.startsWith("SCTUSX_") || sab.startsWith("SNOMED_CT_") || sab.equals("SNOMEDCT") || sab.equals("SCTUSX"))
+		{
+			return true;
+		}
+		return false;
+	}
+	
+	private void loadSCTInfo() throws ClassNotFoundException, IOException
+	{
+		UUID sctIDType = UUID.fromString("0418a591-f75b-39ad-be2c-3ab849326da9");  //"SNOMED integer id"
+		// Read in the SCT data
+		HashMap<String, UUID> sctConcepts = new HashMap<>();
+		File[] temp = sctInputFile.listFiles(new FilenameFilter()
+		{
+			@Override
+			public boolean accept(File dir, String name)
+			{
+				if (name.endsWith(".jbin"))
+				{
+					return true;
+				}
+				return false;
+			}
+		});
+		
+		for (File f : temp)
+		{
+			ConsoleUtil.println("Reading " + f.getName());
+			DataInputStream in = new DataInputStream(new FileInputStream(f));
+	
+			while (in.available() > 0)
+			{
+				if (sctConcepts.size() % 1000 == 0)
+				{
+					ConsoleUtil.showProgress();
+				}
+				EConcept concept = new EConcept(in);
+				
+				if (concept.getConceptAttributes() != null && concept.getConceptAttributes().getAdditionalIdComponents() != null)
+				{
+					for (TkIdentifier id : concept.getConceptAttributes().getAdditionalIdComponents())
+					{
+						if (sctIDType.equals(id.getAuthorityUuid()))
+						{
+							//Store these by SCTID, because there is no reliable way to generate a UUID from a SCTID.
+							sctConcepts.put(id.getDenotation().toString(), concept.getPrimordialUuid());
+							break;
+						}
+					}
+				}
+				
+				
+			}
+			in.close();
+		}
+		ConsoleUtil.println("Read UUIDs from SCT file - read " + sctConcepts.size() + " concepts");
+		sctIDToUUID_ = sctConcepts;
 	}
 
 

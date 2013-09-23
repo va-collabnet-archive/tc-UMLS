@@ -174,12 +174,12 @@ public class UMLSMojo extends BaseConverter
 
 			loadDatabase();
 			
-			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters, additionalRootConcepts);
-			
 			if (sctInputFile != null)
 			{
 				loadSCTInfo();
 			}
+			
+			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters, additionalRootConcepts);
 			
 			String sabQueryStringMTHModified = sabQueryString_;
 			if (sabQueryString_.length() > 0 && skipMTHConcepts)

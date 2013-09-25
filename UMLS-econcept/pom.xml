@@ -4,14 +4,14 @@
 	<parent>
 		<artifactId>UMLS</artifactId>
 		<groupId>gov.va.oia.terminology.converters</groupId>
-		<version>1.1-SNAPSHOT</version>
+		<version>1.1</version>
 	</parent>
 
 	<artifactId>UMLS-econcept</artifactId>
 	<packaging>pom</packaging>
 	<name>UMLS-econcept</name>
 	<!-- this should be set to ${sourceData.version}-loader-${project.parent.version} but that doesn't appease the maven gods that know best.... -->
-	<version>2013AA-loader-1.1-SNAPSHOT</version>
+	<version>2013AA-loader-1.1</version>
 
 	<properties>
 		<sourceData.version>2013AA</sourceData.version>

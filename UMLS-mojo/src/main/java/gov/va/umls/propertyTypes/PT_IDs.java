@@ -11,10 +11,11 @@ public class PT_IDs extends BPT_IDs
 	public PT_IDs()
 	{
 		super();
-		addProperty("CUI", null, "Unique identifier for concept");
-		addProperty("AUI", null, "Unique identifier for atom - variable length field, 8 or 9 characters");
-		addProperty("TUI", null, "Unique identifier of Semantic Type");
-		addProperty("RUI", null, "Unique identifier of Relationship");
-		addProperty("ATUI", null, "Unique identifier of Attribute");
+		indexByAltNames();
+		addProperty("Unique identifier for concept", null, "CUI", null);
+		addProperty("Unique identifier for atom", null, "AUI", "variable length field, 8 or 9 characters");
+		addProperty("Unique identifier of Semantic Type", null, "TUI", null);
+		addProperty("Unique identifier of Relationship", null, "RUI", null);
+		addProperty("Unique identifier of Attribute", null, "ATUI", null);
 	}
 }

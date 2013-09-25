@@ -554,10 +554,10 @@ public class UMLSMojo extends BaseConverter
 	}
 
 	@Override
-	protected Property makeDescriptionType(String fsnName, String preferredName, final Set<String> tty_classes)
+	protected Property makeDescriptionType(String fsnName, String preferredName, String altName, String description, final Set<String> tty_classes)
 	{
 		//Will fill in the rankings below, in the allDescriptionsCreated method
-		return new Property(null, fsnName, preferredName, null, false, 0);
+		return new Property(null, fsnName, preferredName, altName, description, false, 0);
 	}
 
 
@@ -580,7 +580,7 @@ public class UMLSMojo extends BaseConverter
 			String tty = rs.getString("TTY");
 			
 			Property p = ptDescriptions_.get(sab).getProperty(tty);
-			if (p.getSourcePropertyNameFSN().equals("FN"))
+			if (p.getSourcePropertyNameFSN().equals("FN") || "FN".equals(p.getSourcePropertyAltName()))
 			{
 				p.setPropertySubType(fsnPos++);
 			}

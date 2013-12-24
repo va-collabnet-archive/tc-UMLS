@@ -931,7 +931,8 @@ public class UMLSMojo extends BaseConverter
 			return false;
 		}
 		
-		if (sab.startsWith("SCTUSX_") || sab.startsWith("SNOMED_CT_") || sab.equals("SNOMEDCT") || sab.equals("SCTUSX"))
+		if (sab.startsWith("SNOMEDCT_US_") || sab.startsWith("SCTUSX_") || sab.startsWith("SNOMED_CT_") 
+				|| sab.equals("SNOMEDCT_US") || sab.equals("SCTUSX") || sab.equals("SNOMEDCT"))
 		{
 			return true;
 		}

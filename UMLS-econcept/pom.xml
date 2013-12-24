@@ -4,19 +4,19 @@
 	<parent>
 		<artifactId>UMLS</artifactId>
 		<groupId>gov.va.oia.terminology.converters</groupId>
-		<version>1.1</version>
+		<version>1.2</version>
 	</parent>
 
 	<artifactId>UMLS-econcept</artifactId>
 	<packaging>pom</packaging>
 	<name>UMLS-econcept</name>
 	<!-- this should be set to ${sourceData.version}-loader-${project.parent.version} but that doesn't appease the maven gods that know best.... -->
-	<version>2013AA-loader-1.1</version>
+	<version>2013AB-loader-1.2</version>
 
 	<properties>
-		<sourceData.version>2013AA</sourceData.version>
-		<snomed.version>2013.07.31-build-3</snomed.version>
-		<snomed-us-ext.version>20130301-loader-1.0</snomed-us-ext.version>
+		<sourceData.version>2013AB</sourceData.version>
+		<snomed.version>2013.07.31-build-4</snomed.version>
+		<snomed-us-ext.version>20130901-loader-1.0</snomed-us-ext.version>
 	</properties>
 
 	<build>
@@ -130,7 +130,7 @@
 						<configuration>
 							<!-- Point this path to your output from metamorphosys - the folder with the version name. -->
 							<!--srcDataPath>/mnt/d/Work/Apelon/UMLS/extracted-vsab-full/2013AA/</srcDataPath-->
-							<srcDataPath>/mnt/d/scratch/UMLS/extracted-requested-plusSCT/2013AA/</srcDataPath>
+							<srcDataPath>/mnt/d/scratch/UMLS/2013AB/extracted-requested-plusSCT/2013AB/</srcDataPath>
 							<!-- Use this to (optionally) specify the folder where you want the temp SQL DB loaded (by default, this goes in the target folder) -->
 							<!--tmpDBPath>/mnt/d/Scratch/Full-vsab</tmpDBPath-->
 							<!-- Use this to further restrict the output from metamorphosys by SAB (optional - when left out, all data is loaded) -->
@@ -159,8 +159,8 @@
 								<sabFilter>CPT</sabFilter>
 								<sabFilter>MTHCH</sabFilter>  <!-- Need for CPT Hierarchy -->
 								<sabFilter>SRC</sabFilter>  <!-- Need for Hierarchies - SRC isn't selectable in metathesaurus - you get it for free.-->
-								<sabFilter>SCTUSX</sabFilter>  <!-- special handling for Snomed terms -->
-								<sabFilter>SNOMEDCT</sabFilter>  <!-- special handling for Snomed terms -->
+								<!--sabFilter>SCTUSX</sabFilter-->  <!-- special handling for Snomed terms --> <!-- No longer present in 2013AB -->
+								<sabFilter>SNOMEDCT_US</sabFilter>  <!-- special handling for Snomed terms -->
 								<sabFilter>MTH</sabFilter>  <!-- Include this so we get rels between CUIs -->
 								
 								<!-- Recommended by metamorphosis when the above is selected -->

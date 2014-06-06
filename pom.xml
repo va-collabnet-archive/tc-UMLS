@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>gov.va.oia.terminology.converters</groupId>
 	<artifactId>UMLS</artifactId>
-	<version>1.2</version>
+	<version>1.3</version>
 	<packaging>pom</packaging>
 	<name>UMLS</name>
 	<description>UMLS to eConcept converter</description>
@@ -14,7 +14,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<wb-toolkit.version>2.32-trek-no-jini-va-1.11</wb-toolkit.version>
 		<convertersCommonCode.version>2.6.1</convertersCommonCode.version>
-		<umlsLoaderUtils.version>1.3</umlsLoaderUtils.version>
+		<umlsLoaderUtils.version>1.3.2</umlsLoaderUtils.version>
 	</properties>
 
 	<scm>

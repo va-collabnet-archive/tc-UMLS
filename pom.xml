@@ -12,7 +12,7 @@
 	<!-- properties -->
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<wb-toolkit.version>2.32-trek-no-jini-va-1.11</wb-toolkit.version>
+		<wb-toolkit.version>2.32-trek-no-jini-va-1.25</wb-toolkit.version>
 		<convertersCommonCode.version>2.6.1</convertersCommonCode.version>
 		<umlsLoaderUtils.version>1.3.2</umlsLoaderUtils.version>
 	</properties>

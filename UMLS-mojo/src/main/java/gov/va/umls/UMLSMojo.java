@@ -3,20 +3,21 @@ package gov.va.umls;
 import gov.va.oia.terminology.converters.sharedUtils.ConsoleUtil;
 import gov.va.oia.terminology.converters.sharedUtils.EConceptUtility.DescriptionType;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.BPT_Descriptions;
-import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.BPT_Refsets;
+import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.BPT_MemberRefsets;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.Property;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.PropertyType;
 import gov.va.oia.terminology.converters.sharedUtils.propertyTypes.ValuePropertyPair;
 import gov.va.oia.terminology.converters.sharedUtils.stats.ConverterUUID;
-import gov.va.oia.terminology.converters.umlsUtils.BaseConverter;
+import gov.va.oia.terminology.converters.umlsUtils.RRFBaseConverterMojo;
 import gov.va.oia.terminology.converters.umlsUtils.RRFDatabaseHandle;
 import gov.va.oia.terminology.converters.umlsUtils.UMLSFileReader;
 import gov.va.oia.terminology.converters.umlsUtils.ValuePropertyPairWithAttributes;
 import gov.va.oia.terminology.converters.umlsUtils.rrf.REL;
 import gov.va.oia.terminology.converters.umlsUtils.sql.TableDefinition;
-import gov.va.umls.propertyTypes.PT_Attributes;
+import gov.va.umls.propertyTypes.PT_Annotations;
 import gov.va.umls.propertyTypes.PT_IDs;
 import gov.va.umls.rrf.MRCONSO;
+
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -28,6 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -39,7 +41,11 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugins.annotations.LifecyclePhase;
+import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.plugins.annotations.Parameter;
 import org.ihtsdo.etypes.EConcept;
 import org.ihtsdo.tk.dto.concept.component.TkComponent;
 import org.ihtsdo.tk.dto.concept.component.description.TkDescription;
@@ -48,12 +54,9 @@ import org.ihtsdo.tk.dto.concept.component.refex.type_string.TkRefsetStrMember;
 
 /**
  * Goal to convert UMLS data
- * 
- * @goal buildUMLS
- * 
- * @phase process-sources
  */
-public class UMLSMojo extends BaseConverter 
+@Mojo (name = "buildUMLS", defaultPhase = LifecyclePhase.PROCESS_SOURCES)
+public class UMLSMojo extends RRFBaseConverterMojo
 {
 	private PropertyType ptSTT_Types_, ptTermStatus_;
 	private PreparedStatement satAtomStatement, satConceptStatement, semanticTypeStatement, 
@@ -71,84 +74,43 @@ public class UMLSMojo extends BaseConverter
 	private HashMap<String, UUID> sctIDToUUID_ = null;
 	
 	/**
-	 * Where UMLS source files are
-	 * 
-	 * @parameter
-	 * @required
-	 */
-	protected File srcDataPath;
-	
-	/**
 	 * Where to write the H2 database
-	 * 
-	 * @parameter
-	 * @optional
 	 */
+	@Parameter 
 	protected File tmpDBPath;
 
 	/**
-	 * Location of the file.
-	 * 
-	 * @parameter expression="${project.build.directory}"
-	 * @required
-	 */
-	protected File outputDirectory;
-	
-	/**
-	 * Loader version number
-	 * Use parent because project.version pulls in the version of the data file, which I don't want.
-	 * 
-	 * @parameter expression="${project.parent.version}"
-	 * @required
-	 */
-	protected String loaderVersion;
-
-	/**
-	 * Content version number
-	 * 
-	 * @parameter expression="${project.version}"
-	 * @required
-	 */
-	protected String releaseVersion;
-	
-	/**
 	 * A list of SABs to include in the load.  If provided, any SABs that do not match are excluded from the conversion.
 	 * If not provided, or blank, all data found in the Metamorphosys output it loaded.
-	 * 
-	 * @parameter
-	 * @optional
 	 */
+	@Parameter 
 	private List<String> sabFilters;
 	
 	/**
 	 * A list of SAB|CUI|AUI concept identifiers that should denote root concepts.  Each unique SAB concept will be marked as a root
 	 * and each uniqe CUI|AUI pair will be added as a child.
-	 * 
-	 * @parameter
-	 * @optional
 	 */
+	@Parameter 
 	private List<String> additionalRootConcepts;
 	
 	/**
 	 * Location of sct jbin data file. Expected to be a directory.
-	 * 
-	 * @parameter
-	 * @optional
 	 */
+	@Parameter 
 	private File sctInputFile;
 	
 	/**
 	 * An optional flag to tell us to skip concepts with a SAB of MTH when processing concepts
 	 * (we often want to keep MTH in the subset to get the relationships)
-	 * @parameter
-	 * @optional
 	 */
+	@Parameter 
 	private boolean skipMTHConcepts;
 	
 	
 	private HashMap<String, EConcept> pendingSCTRelatedConcepts_ = new HashMap<>();
 	private HashSet<String> usedSCTRelatedConceptsCUIs_ = new HashSet<>();
 
+	@Override
 	public void execute() throws MojoExecutionException
 	{
 		long startTime = System.currentTimeMillis();
@@ -158,18 +120,18 @@ public class UMLSMojo extends BaseConverter
 		{
 			outputDirectory.mkdir();
 			
-			if (srcDataPath.isDirectory())
+			if (inputFileLocation.isDirectory())
 			{
-				if (!new File(srcDataPath, "META").isDirectory())
+				if (!new File(inputFileLocation, "META").isDirectory())
 				{
 					throw new MojoExecutionException("Please configure UMLS-eConcept/pom.xml 'srcDataPath' to point to the version output folder of metamorphosys."
-							+ "  Didn't find the expected 'META' folder under " + srcDataPath.getAbsolutePath());
+							+ "  Didn't find the expected 'META' folder under " + inputFileLocation.getAbsolutePath());
 				}
 			}
 			else
 			{
 				throw new MojoExecutionException("Please configure UMLS-eConcept/pom.xml 'srcDataPath' to point to the version output folder of metamorphosys."
-						+ "  Currently set to " + srcDataPath.getAbsolutePath());
+						+ "  Currently set to " + inputFileLocation.getAbsolutePath());
 			}
 
 			loadDatabase();
@@ -179,7 +141,12 @@ public class UMLSMojo extends BaseConverter
 				loadSCTInfo();
 			}
 			
-			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Attributes(), sabFilters, additionalRootConcepts);
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM");
+			
+			String temp = converterResultVersion.substring(0, 7);
+			temp = temp.replace("AA", "-01");  //Just hardcode AA to Jan for now.  will need more rules later...
+			
+			init(outputDirectory, "UMLS", "MR", new PT_IDs(), new PT_Annotations(), sabFilters, additionalRootConcepts, sdf.parse(temp).getTime());
 			
 			String sabQueryStringMTHModified = sabQueryString_;
 			if (sabQueryString_.length() > 0 && skipMTHConcepts)
@@ -229,7 +196,7 @@ public class UMLSMojo extends BaseConverter
 			
 			// Add version data to rootConcept
 			eConcepts_.addStringAnnotation(umlsRootConcept_, loaderVersion,  ptContentVersion_.LOADER_VERSION.getUUID(), false);
-			eConcepts_.addStringAnnotation(umlsRootConcept_, releaseVersion, ptContentVersion_.RELEASE.getUUID(), false);
+			eConcepts_.addStringAnnotation(umlsRootConcept_, converterResultVersion, ptContentVersion_.RELEASE.getUUID(), false);
 			
 			for (Entry<String, String> relInfo : umlsReleaseInfo.entrySet())
 			{
@@ -328,8 +295,6 @@ public class UMLSMojo extends BaseConverter
 			ConsoleUtil.println("Wrote out  " + cuiCount+ " SCT CUI concepts");
 			
 			finish(outputDirectory);
-			
-			db_.shutdown();
 		}
 		catch (Exception e)
 		{
@@ -340,7 +305,10 @@ public class UMLSMojo extends BaseConverter
 		{
 			try
 			{
-				db_.shutdown();
+				if (db_ != null)
+				{
+					db_.shutdown();
+				}
 			}
 			catch (SQLException e)
 			{
@@ -357,7 +325,7 @@ public class UMLSMojo extends BaseConverter
 	{
 		// Set up the DB for loading the temp data
 		db_ = new RRFDatabaseHandle();
-		File meta = new File(srcDataPath, "META");
+		File meta = new File(inputFileLocation, "META");
 		
 		File h2Folder;
 		
@@ -472,7 +440,7 @@ public class UMLSMojo extends BaseConverter
 	}
 	
 	@Override
-	protected void addCustomRefsets(BPT_Refsets refset) throws Exception
+	protected void addCustomRefsets(BPT_MemberRefsets refset) throws Exception
 	{
 		//noop
 	}
@@ -997,8 +965,8 @@ public class UMLSMojo extends BaseConverter
 		UMLSMojo mojo = new UMLSMojo();
 		mojo.outputDirectory = new File("../UMLS-econcept/target");
 		mojo.loaderVersion = "eclipse debug loader";
-		mojo.releaseVersion = "eclipse debug release";
-		mojo.srcDataPath = new File("/mnt/d/Work/Apelon/UMLS/extracted-requested/2013AA/");
+		mojo.converterResultVersion = "eclipse debug release";
+		mojo.inputFileLocation = new File("/mnt/d/Work/Apelon/UMLS/extracted-requested/2013AA/");
 		//mojo.tmpDBPath = new File("/mnt/d/Scratch/Full-vsab");
 		mojo.sabFilters = new ArrayList<String>();
 		mojo.sabFilters.add("ICD9CM");

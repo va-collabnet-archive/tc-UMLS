@@ -1,23 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<parent>
-		<artifactId>UMLS</artifactId>
-		<groupId>gov.va.oia.terminology.converters</groupId>
-		<version>1.3</version>
-	</parent>
 
+	<groupId>gov.va.oia.terminology.converters</groupId>
 	<artifactId>UMLS-econcept</artifactId>
+	<!-- this should be set to ${sourceData.version}-loader-${project.parent.version} but that doesn't appease the maven gods that know best.... -->
+	<version>2014AA-loader-2.0-SNAPSHOT</version>
+	
 	<packaging>pom</packaging>
 	<name>UMLS-econcept</name>
-	<!-- this should be set to ${sourceData.version}-loader-${project.parent.version} but that doesn't appease the maven gods that know best.... -->
-	<version>2014AA-loader-1.3</version>
 
 	<properties>
 		<sourceData.version>2014AA</sourceData.version>
 		<snomed.version>2014.01.31-build-8</snomed.version>
 		<snomed-us-ext.version>20140301-loader-1.1</snomed-us-ext.version>
-		<loader.version>1.3</loader.version>
+		<loader.version>2.0-SNAPSHOT</loader.version>
 	</properties>
 
 	<build>
@@ -124,7 +121,7 @@
 			<plugin>
 				<groupId>${project.groupId}</groupId>
 				<artifactId>UMLS-mojo</artifactId>
-				<version>${project.parent.version}</version>
+				<version>${loader.version}</version>
 				<executions>
 					<execution>
 						<id>buildUMLS</id>

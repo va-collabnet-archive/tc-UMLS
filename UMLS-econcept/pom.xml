@@ -12,8 +12,8 @@
 
 	<properties>
 		<sourceData.version>2014AA</sourceData.version>
-		<snomed.version>2014.01.31-build-8</snomed.version>
-		<snomed-us-ext.version>20140301-loader-1.1</snomed-us-ext.version>
+		<snomed.version>2015.01.31-build-7</snomed.version>
+		<snomed-us-ext.version>20140901-loader-1.1</snomed-us-ext.version>
 		<loader.version>2.0-SNAPSHOT</loader.version>
 	</properties>
 
